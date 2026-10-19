@@ -1,15 +1,12 @@
 import type { BaseLayoutProps } from 'fumadocs-ui/layouts/shared';
-import { repoUrl } from './shared';
+import { basePath, repoUrl } from './shared';
 
 export function Wordmark() {
   return (
     <span className="flex items-center gap-2 font-mono text-[15px] font-semibold tracking-tight">
-      <span
-        aria-hidden
-        className="grid size-6 place-items-center rounded-md border border-fd-border bg-fd-card text-[11px] text-sagu-accent"
-      >
-        sg
-      </span>
+      {/* Plain <img>: the nav renders the title twice, and inline SVG ids would collide. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={`${basePath}/icon.svg`} alt="" className="size-6" />
       SAGU
     </span>
   );
