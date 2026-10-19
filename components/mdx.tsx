@@ -4,7 +4,14 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 import { TypeTable } from 'fumadocs-ui/components/type-table';
 import type { MDXComponents } from 'mdx/types';
 import { FileCode2 } from 'lucide-react';
-import { ArchitectureOverview, HandoffDiagram, MemoryDiagram, ProviderDiagram, RuntimeDiagram } from './diagrams';
+import {
+  ArchitectureOverview,
+  BackgroundProcessesDiagram,
+  HandoffDiagram,
+  MemoryDiagram,
+  ProviderDiagram,
+  RuntimeDiagram,
+} from './diagrams';
 import { sourceUrl } from '@/lib/shared';
 
 /** Inline link to a file in the SDK repository, e.g. <Source path="src/runner.ts" />. */
@@ -50,6 +57,7 @@ export function getMDXComponents(components?: MDXComponents) {
     ProviderDiagram,
     MemoryDiagram,
     HandoffDiagram,
+    BackgroundProcessesDiagram,
     ...components,
   } satisfies MDXComponents;
 }

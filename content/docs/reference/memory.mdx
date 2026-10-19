@@ -12,12 +12,26 @@ interface SessionStore {
   clear(sessionId: string): Promise<void>;
 }
 
-interface GraphMemoryEntry { subject: string; predicate: string; object: string; metadata?: Record<string, unknown>; }
+interface GraphMemoryEntry {
+  subject: string;
+  predicate: string;
+  object: string;
+  confidence?: number;
+  mentions?: number;
+  source?: string;
+  createdAt?: number;
+  updatedAt?: number;
+  metadata?: Record<string, unknown>;
+}
+interface FactKey { subject: string; predicate: string; object: string; }
 interface GraphMemoryQuery { about: string; limit?: number; }
 
 interface GraphMemoryStore {
   remember(entry: GraphMemoryEntry): Promise<void>;
   recall(query: GraphMemoryQuery): Promise<GraphMemoryEntry[]>;
+  listFacts(): Promise<GraphMemoryEntry[]>;
+  forget(key: FactKey): Promise<void>;
+  mergeEntities(from: string, into: string): Promise<void>;
   close(): Promise<void>;
 }
 ```
@@ -48,8 +62,8 @@ new Neo4jGraphMemoryStore(options: Neo4jGraphMemoryOptions)
 
 interface Neo4jGraphMemoryOptions {
   uri: string;
-  username?: string;   // currently ignored; NEO4J_USER is used
-  password?: string;   // currently ignored; NEO4J_PASSWORD is used
+  username?: string;   // default: NEO4J_USER ?? NEO4J_USERNAME
+  password?: string;   // default: NEO4J_PASSWORD
   database?: string;
   driver?: any;
 }
@@ -70,4 +84,93 @@ function createGraphMemoryTools(store: GraphMemoryStore): Tool[];
 | `remember_fact` | `{ subject: string; predicate: string; object: string }` | `{ stored: true, fact, message }` |
 | `recall_facts` | `{ about: string; limit?: number /* default 5 */ }` | `{ count, facts: GraphMemoryEntry[], summary }` |
 
-<SourceList paths={["src/memory/types.ts", "src/memory/inMemory.ts", "src/memory/file.ts", "src/memory/sqlite.ts", "src/memory/graphMemory.ts", "src/memory/neo4jGraphMemory.ts", "src/memory/graphMemoryTools.ts"]} />
+## Long-term memory
+
+```ts
+new LongTermMemory(options: LongTermMemoryOptions)
+
+class LongTermMemory implements LongTermMemoryHook {
+  readonly store: GraphMemoryStore;
+  readonly extractor: FactExtractor;
+  readonly relationshipBuilder: RelationshipBuilder;
+  readonly maintainer: GraphMaintainer;
+  on(listener: GraphEventListener): () => void;            // returns unsubscribe
+  start(): void;
+  stop(options?: { flush?: boolean }): Promise<void>;
+  flush(): Promise<void>;
+  ingest(messages: Message[], meta?: { sessionId?: string }): void;
+  retrieveContext(input: string): Promise<RetrievedContext>; // { facts, text }
+}
+
+interface LongTermMemoryOptions {
+  store: GraphMemoryStore;
+  model: ModelProvider;
+  extractor?: { intervalMs?; maxRetries?; minConfidence?; batchSize?; maxAttempts?; instructions? };
+  relationships?: { intervalMs?; maxRetries?; rules?: InferenceRule[]; symmetricPredicates?: string[]; minConfidence? };
+  maintenance?: { intervalMs?; maxRetries?; halfLifeMs?; pruneBelow?; singleValuedPredicates?: string[] };
+  retrieval?: { limit?: number; minConfidence?: number; alwaysInclude?: string[] };
+  traceExporter?: TraceExporter;
+}
+
+interface LongTermMemoryHook {   // what RunOptions.longTermMemory accepts
+  retrieveContext(input: string): Promise<{ facts: GraphMemoryEntry[]; text: string }>;
+  ingest(messages: Message[], meta?: { sessionId?: string }): void;
+}
+```
+
+## Background processes
+
+```ts
+abstract class GraphProcess {
+  readonly name: GraphProcessName;          // "fact_extractor" | "relationship_builder" | "graph_maintainer"
+  readonly store: GraphMemoryStore;
+  readonly intervalMs: number;
+  get isRunning(): boolean;
+  start(): void;
+  stop(): Promise<void>;
+  runOnce(): Promise<number>;               // changes made; never throws
+  protected abstract work(ctx: ProcessContext): Promise<number>;
+}
+
+interface GraphProcessOptions { store; intervalMs?; maxRetries?; onEvent?: GraphEventListener; traceExporter? }
+
+new FactExtractor(options: GraphProcessOptions & { model; minConfidence?; batchSize?; maxAttempts?; instructions? })
+  // enqueue(input: { messages: Message[]; sessionId?: string }): void;  get pending(): number
+new RelationshipBuilder(options: GraphProcessOptions & { rules?; symmetricPredicates?; minConfidence? })
+new GraphMaintainer(options: GraphProcessOptions & { halfLifeMs?; pruneBelow?; singleValuedPredicates? })
+
+interface InferenceRule { name: string; when: [string, string]; then: string; }
+const DEFAULT_INFERENCE_RULES: InferenceRule[];
+const DEFAULT_SYMMETRIC_PREDICATES: string[];
+const DEFAULT_SINGLE_VALUED_PREDICATES: string[];
+```
+
+Extend `GraphProcess` and implement `work(ctx)` to add your own process. Call `ctx.record(update)` for every change.
+
+## Graph events
+
+```ts
+type GraphUpdate =
+  | { operation: "fact_added" | "fact_reinforced"; fact: GraphMemoryEntry }
+  | { operation: "relationship_inferred" | "relationship_updated"; fact: GraphMemoryEntry; rule: string }
+  | { operation: "entities_merged"; from: string; into: string }
+  | { operation: "conflict_resolved"; kept: GraphMemoryEntry; removed: GraphMemoryEntry }
+  | { operation: "fact_pruned"; fact: GraphMemoryEntry; reason: "stale" | "low_confidence"; effectiveConfidence: number };
+
+type GraphEvent =
+  | ({ type: "graph_updated"; process: GraphProcessName } & GraphUpdate)
+  | { type: "process_completed"; process: GraphProcessName; changes: number; durationMs: number; traceId: string }
+  | { type: "process_failed"; process: GraphProcessName; error: unknown; attempt: number; willRetry: boolean };
+```
+
+## Fact helpers
+
+```ts
+function normalizeEntity(name: string): string;          // trim + collapse whitespace
+function normalizePredicate(predicate: string): string;  // "works on" → "WORKS_ON"
+function entityKey(name: string): string;                // duplicate-detection key
+function reinforceConfidence(existing: number, incoming: number): number; // noisy-OR
+function effectiveConfidence(fact: GraphMemoryEntry, now: number, halfLifeMs: number): number;
+```
+
+<SourceList paths={["src/memory/longTermMemory.ts", "src/memory/graphProcesses.ts", "src/memory/facts.ts", "src/memory/types.ts", "src/memory/inMemory.ts", "src/memory/file.ts", "src/memory/sqlite.ts", "src/memory/graphMemory.ts", "src/memory/neo4jGraphMemory.ts", "src/memory/graphMemoryTools.ts"]} />

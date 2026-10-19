@@ -12,7 +12,8 @@ Everything below is in `streamAgent()` in <Source path="src/runner.ts" />. `agen
 1. **Create run state.** A fresh `runId` (UUID), a `TraceRecorder` with a root `agent_run` span, an empty `messages` array, zeroed `usage`, and counters for `turn`, `handoffCount` and `repairAttempts`. Limits are fixed here: `maxTurns` and `maxHandoffs` come from `RunOptions` if set, otherwise from the starting agent. `maxRepairAttempts` always comes from the starting agent.
 2. **Load history.** If you passed both `sessionId` and `sessionStore`, `getHistory(sessionId)` is prepended (span `session_load`). Then any `initialMessages` you passed are appended.
 3. **Input guardrails.** Each of the starting agent's `inputGuardrails` runs in order. A failing guardrail ends the run with `GuardrailError` (stage `input`); a guardrail that returns `modified` replaces the input for the guardrails that follow and for the model.
-4. **Append the user message** with the final input text.
+4. **Long-term memory.** If `longTermMemory` is set, `retrieveContext(input)` returns ranked facts (span `memory_read`, event `memory_updated`). They're appended to the system prompt on every turn as a `[LONG-TERM MEMORY]` block. A failure here is recorded on the span and doesn't fail the run.
+5. **Append the user message** with the final input text.
 
 ## Each turn
 
@@ -32,7 +33,8 @@ While `turn < maxTurns`:
 1. **Structured output.** If there is an `outputSchema`, the text is parsed and validated. On failure, and if `repairAttempts < maxRepairAttempts`, the runner appends the bad answer and a repair prompt listing the Zod issues, then **starts another turn**. Once attempts are exhausted, the run fails with `StructuredOutputError`.
 2. **Output guardrails** run on the raw text. A block fails the run with `GuardrailError` (stage `output`); `modified` replaces the text.
 3. **Save the session.** The messages from this run (from the user message onwards) are appended to the store (span `session_save`).
-4. **Yield `run_completed`** with `output` (the parsed object, or the possibly-modified text), `messages`, `usage`, the active `agentName`, `turns` and the redacted `trace`.
+4. **Queue for extraction.** If `longTermMemory` is set, the same messages are handed to `ingest()`. It's a synchronous queue push, not awaited extraction (span `memory_write`, event `memory_updated`).
+5. **Yield `run_completed`** with `output` (the parsed object, or the possibly-modified text), `messages`, `usage`, the active `agentName`, `turns` and the redacted `trace`.
 
 If the loop exits because `turn` reached `maxTurns`, the run fails with `MaxTurnsExceededError`. Any unexpected exception, such as a provider error or a `MemoryError` from a session store, is caught and returned as `run_failed`. Non-SAGU errors are wrapped as a `SaguError` with code `SAGU_PROVIDER_ERROR`.
 

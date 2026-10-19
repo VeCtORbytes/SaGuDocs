@@ -60,6 +60,7 @@ interface RunContext {
     onApprovalRequired: { type: '(toolCall: ToolCall) => boolean | Promise<boolean>', description: 'Approves requiresApproval tools. Absent means denied.' },
     traceExporter: { type: 'TraceExporter', description: 'Receives the trace when the run ends.' },
     initialMessages: { type: 'Message[]', description: 'Appended after session history, before the user input.' },
+    longTermMemory: { type: 'LongTermMemoryHook', description: 'Facts from retrieveContext() are added to the system prompt; the finished conversation is passed to ingest(). Failures are non-fatal.' },
   }}
 />
 

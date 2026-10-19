@@ -54,7 +54,7 @@ Messages are appended to the `SessionStore` only when the run **succeeds**, and 
 ## `MemoryError` from `Neo4jGraphMemoryStore`
 
 - `Failed to initialize neo4j driver` → run `npm install neo4j-driver`.
-- Authentication errors → set `NEO4J_USER` and `NEO4J_PASSWORD` in the environment. The constructor's `username`/`password` options are currently ignored.
+- Authentication errors → pass `username`/`password`, or set `NEO4J_USER` and `NEO4J_PASSWORD`.
 
 ## Streaming prints the whole answer at once
 

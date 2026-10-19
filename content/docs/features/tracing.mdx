@@ -57,6 +57,8 @@ Console output from example 01:
 | `tool_guardrail` | `toolName`, `pass`, `reason?` |
 | `tool_execution` | `toolName`, `success` |
 | `session_save` | `savedCount` |
+| `memory_read` | `factCount` (long-term facts injected) |
+| `memory_write` | `queuedMessages` (conversation queued for extraction) |
 
 Failed spans carry `error: { name, message, stack }`.
 
@@ -79,7 +81,7 @@ const httpExporter: TraceExporter = {
 ## Limitations
 
 - **Not OpenTelemetry.** The format is SAGU's own. Write an exporter to forward to OTel or your vendor.
-- **Retries, fallbacks and approvals have no spans**, and graph memory operations show up only as `tool_execution`.
+- **Retries, fallbacks and approvals have no spans.** Background graph processes produce their own traces (one per pass) through the `traceExporter` you give `LongTermMemory`.
 - **Tool arguments and results are not recorded** in span attributes, only `toolName` and `success`.
 - **Millisecond resolution** (`Date.now()`), so fast spans show `0ms`.
 - **Redaction is heuristic.** Don't rely on it as your only protection against logging secrets.

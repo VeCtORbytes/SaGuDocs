@@ -50,6 +50,7 @@ const attributes = [
   { k: 'language', v: 'TypeScript, ESM' },
   { k: 'runtime dep', v: 'zod (neo4j-driver optional)' },
   { k: 'providers', v: 'Mock · Anthropic · OpenAI · Gemini' },
+  { k: 'graph memory', v: 'Neo4j + 3 background processes' },
   { k: 'tests', v: 'node --test, no API keys' },
   { k: 'license', v: 'MIT' },
 ];
@@ -81,9 +82,9 @@ const features: { icon: ReactNode; title: string; body: string; href: string }[]
   },
   {
     icon: <Database />,
-    title: 'Sessions & graph memory',
-    body: 'In-memory, JSON-file and node:sqlite history. Triplet graph memory in memory or Neo4j, exposed as tools.',
-    href: '/docs/features/session-memory',
+    title: 'Self-maintaining graph memory',
+    body: 'Facts in Neo4j kept clean by three background processes: extract, infer relationships, merge/resolve/prune. Plus session history.',
+    href: '/docs/features/background-processes',
   },
   {
     icon: <Radio />,
@@ -131,6 +132,11 @@ const examples = [
     path: 'examples/04-graph-memory-longterm-recall',
     title: 'Graph memory recall',
     body: 'One agent stores facts with remember_fact; a second agent with no chat history recalls them.',
+  },
+  {
+    path: 'examples/05-background-graph-memory',
+    title: 'Background graph memory',
+    body: 'Runs return instantly while three processes extract facts, infer edges, merge duplicates and resolve conflicts.',
   },
 ];
 
@@ -255,8 +261,7 @@ export default function HomePage() {
             ))}
           </ul>
           <p className="mt-6 text-sm text-fd-muted-foreground">
-            Not yet: automatic fact extraction or background graph maintenance, token-level streaming from real providers, and
-            an npm release. See{' '}
+            Not yet: token-level streaming from real providers, semantic (vector) retrieval, and an npm release. See{' '}
             <Link href="/docs/contributing/limitations" className="text-sagu-accent hover:underline">
               known limitations
             </Link>
@@ -282,7 +287,7 @@ export default function HomePage() {
       {/* Examples */}
       <section className="border-b border-fd-border">
         <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
-          <SectionHeader kicker="examples" title="Four runnable examples">
+          <SectionHeader kicker="examples" title="Five runnable examples">
             All run offline with the scripted MockProvider: <code className="font-mono text-sm">node examples/&lt;name&gt;/index.ts</code>
           </SectionHeader>
           <ul className="grid gap-4 md:grid-cols-2">

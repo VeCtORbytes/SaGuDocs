@@ -5,20 +5,45 @@ description: Long-term facts as subject → predicate → object triplets, store
 
 ## What it does
 
-A `GraphMemoryStore` holds facts such as `(User) -[PREFERS_LANGUAGE]-> (TypeScript)`. `createGraphMemoryTools(store)` returns two tools you add to any agent:
+A `GraphMemoryStore` holds facts such as `(User) -[PREFERS_LANGUAGE]-> (TypeScript)`, each with `confidence`, `mentions`, `source`, `createdAt` and `updatedAt`. Agents use it in two ways:
 
-| Tool | Arguments | Does |
+| Mode | How | Who decides what's stored |
 |---|---|---|
-| `remember_fact` | `subject`, `predicate`, `object` (strings) | `store.remember({ subject, predicate, object })` |
-| `recall_facts` | `about` (string), `limit` (number, default 5) | `store.recall({ about, limit })`, returning `{ count, facts, summary }` |
+| **Automatic** | `agent.run(input, { longTermMemory })` with a [`LongTermMemory`](/docs/features/background-processes) | Background processes extract, link and clean facts; relevant facts are injected into every prompt |
+| **Explicit tools** | `tools: createGraphMemoryTools(store)` | The model calls `remember_fact` / `recall_facts` |
 
-The model decides when to store and when to look facts up.
+You can combine both on one agent and one store.
 
 ## What problem it solves
 
-Session history is long, linear and tied to one conversation. Facts are compact and reusable: a different agent, in a new session with no chat history, can recall that the user prefers TypeScript.
+Session history is long, linear and tied to one conversation. Facts are compact and reusable: a different agent, in a new session with no chat history, can still know that the user moved to Berlin and works on Atlas.
 
-## Example
+## Automatic mode
+
+```ts
+import { Agent, LongTermMemory, InMemoryGraphMemoryStore, anthropic } from "../src/index.ts";
+
+const memory = new LongTermMemory({ store: new InMemoryGraphMemoryStore(), model: anthropic() });
+memory.start();
+
+const agent = new Agent({ name: "Assistant", instructions: "Help the user.", model: anthropic() });
+await agent.run("I work on Atlas, which runs on Neo4j.", { longTermMemory: memory });
+// … later, any session:
+await agent.run("Which database should my next service use?", { longTermMemory: memory });
+
+await memory.stop();
+```
+
+How extraction, inference and maintenance work: [Background graph processes](/docs/features/background-processes).
+
+## Explicit tools
+
+`createGraphMemoryTools(store)` returns two tools:
+
+| Tool | Arguments | Does |
+|---|---|---|
+| `remember_fact` | `subject`, `predicate`, `object` (strings) | `store.remember({ subject, predicate, object, source: "tool:remember_fact" })` |
+| `recall_facts` | `about` (string), `limit` (number, default 5) | `store.recall({ about, limit })`, returning `{ count, facts, summary }` |
 
 From <Source path="examples/04-graph-memory-longterm-recall/index.ts" />:
 
@@ -52,26 +77,20 @@ To switch to Neo4j without code changes, use `createAutoGraphMemoryStore()`. It 
 
 ## How it works internally
 
-- **In-memory store.** An array of entries. `remember` replaces an existing entry if subject, predicate and object match case-insensitively; otherwise it appends. `recall` returns entries where the whole `about` string appears in the triplet, **or any whitespace-separated word** of it appears in the subject, predicate or object (default limit 10).
-- **Neo4j store.** `remember` runs `MERGE (s:Entity {name}) MERGE (o:Entity {name}) MERGE (s)-[r:RELATION {type}]->(o) SET r.updatedAt = timestamp()`. `recall` matches relations where `toLower(name or type) CONTAINS toLower($about)`, using the **whole** `about` string, not individual words.
-- Graph memory is **not wired into the runner**. There are no automatic reads or writes, no graph events and no graph spans. Its tool calls do appear as `tool_execution` spans and `tool_start`/`tool_end` events.
+- **Store operations:** `remember` (upsert: keeps `createdAt`, increments `mentions`, refreshes `updatedAt`), `recall`, `listFacts`, `forget`, `mergeEntities`, `close`.
+- **Recall** matches the whole query **or any word of it** against subject, predicate and object, case-insensitively. Neo4j orders results by confidence.
+- **Fact identity:** the in-memory store compares subject/predicate/object case-insensitively. Neo4j matches entity names exactly; the maintainer merges case variants.
+- **Neo4j model:** `(:Entity {name})-[:RELATION {type, confidence, mentions, source, createdAt, updatedAt}]->(:Entity {name})`.
 
 ## Limitations
 
-<Callout type="warn" title="Not implemented today">
-  There is **no automatic fact extraction** from conversations, **no background processes** that link, merge, prune
-  or score facts, and **no confidence or timestamps** in the in-memory store. Everything in the graph was written by a
-  model calling `remember_fact` (or your own code calling `store.remember`).
-</Callout>
-
 - **In-memory facts are lost on restart.** Use Neo4j for persistence.
-- **Neo4j recall is substring-only.** `"language database preference"` matches only if that exact phrase appears, unlike the in-memory store's word matching. Ask the model to recall short entity names.
 - **`metadata` is not stored in Neo4j.**
-- **Neo4j credentials** come from `NEO4J_USER` / `NEO4J_PASSWORD`; the `username`/`password` options are ignored. See [Environment variables](/docs/getting-started/environment-variables).
-- **Duplicates by meaning** (`PREFERS` vs `LIKES`, `TS` vs `TypeScript`) are not merged.
+- **Keyword recall, not semantic search.** Synonyms (`car` / `vehicle`) aren't matched.
+- **Duplicates by meaning** (`PREFERS` vs `LIKES`) are not merged; duplicates by spelling are (see the [maintainer](/docs/features/background-processes#3--graphmaintainer)).
 
 Setup details: [Graph memory guide](/docs/memory/graph).
 
 ## Related source
 
-<SourceList paths={["src/memory/graphMemory.ts", "src/memory/neo4jGraphMemory.ts", "src/memory/graphMemoryTools.ts", "test/memory.test.ts", "examples/04-graph-memory-longterm-recall/index.ts"]} />
+<SourceList paths={["src/memory/graphMemory.ts", "src/memory/neo4jGraphMemory.ts", "src/memory/graphMemoryTools.ts", "src/memory/longTermMemory.ts", "test/memory.test.ts", "examples/04-graph-memory-longterm-recall/index.ts"]} />

@@ -23,16 +23,15 @@ This list was compiled from the source code at the time these docs were written.
 
 ## Memory
 
-- **No automatic fact extraction** and **no background graph processes** (relationship building, deduplication by meaning, pruning, confidence). ([Graph memory](/docs/features/graph-memory#limitations))
+- **Background processes are single-node.** The extraction queue is in memory (lost on crash), there's no lock between two Node processes sharing one Neo4j, and Neo4j merges aren't transactional. ([Background processes](/docs/features/background-processes#limitations))
+- **Keyword retrieval, not semantic.** Synonyms aren't matched, and duplicates by meaning (`PREFERS` vs `LIKES`) aren't merged. ([Graph memory](/docs/features/graph-memory#limitations))
 - In-memory graph facts **do not persist** across restarts.
-- Neo4j recall is whole-string substring matching; `metadata` is not persisted.
-- `Neo4jGraphMemoryStore` ignores `username`/`password` options; it uses `NEO4J_USER`/`NEO4J_PASSWORD`. ([Environment variables](/docs/getting-started/environment-variables))
+- Neo4j doesn't persist `metadata`.
 - Sessions are saved only on success; no summarization or token-aware truncation. ([Session memory](/docs/features/session-memory#limitations-and-common-mistakes))
 - `FileSession` has no locking for concurrent writers.
 
 ## Runtime
 
-- No `memory_updated` / `graph_updated` events; graph and session operations are not first-class in events. ([Streaming](/docs/features/streaming#limitations))
 - Tool calls in one response run sequentially.
 - Output guardrail `modified` text doesn't affect parsed structured output. ([Guardrails](/docs/features/guardrails#limitations-and-common-mistakes))
 - Aborted runs use code `SAGU_CONFIG_ERROR`; unknown exceptions are labelled `SAGU_PROVIDER_ERROR`. ([Error handling](/docs/features/error-handling#limitations-and-common-mistakes))

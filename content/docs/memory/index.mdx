@@ -14,9 +14,10 @@ SAGU has two separate memory systems. They solve different problems and are conf
 | Interface | `SessionStore` | `GraphMemoryStore` |
 | Stores | Ordered `Message[]` per `sessionId` | `{ subject, predicate, object }` triplets |
 | Scope | One conversation | Any agent holding the same store |
-| Wired via | `RunOptions.sessionId` + `sessionStore` | `tools: createGraphMemoryTools(store)` |
-| Read | Automatically, before every run | When the model calls `recall_facts` |
-| Write | Automatically, after every **successful** run | When the model calls `remember_fact` |
+| Wired via | `RunOptions.sessionId` + `sessionStore` | `RunOptions.longTermMemory`, and/or `tools: createGraphMemoryTools(store)` |
+| Read | Automatically, before every run | Automatically (ranked facts in the prompt), or when the model calls `recall_facts` |
+| Write | Automatically, after every **successful** run | Background extraction after each successful run, or `remember_fact` |
+| Maintained | No | Yes: relationship inference, deduplication, conflict resolution, pruning |
 | Good for | "Continue our chat" | "Remember I prefer TypeScript" |
 
 You can use both at once on the same agent.

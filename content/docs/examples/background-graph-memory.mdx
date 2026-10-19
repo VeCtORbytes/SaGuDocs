@@ -1,0 +1,97 @@
+---
+title: "05 · Background graph memory"
+description: Agent runs feed long-term memory while three background processes extract, link and clean the graph.
+---
+
+<Source path="examples/05-background-graph-memory/index.ts" />
+
+```bash
+node examples/05-background-graph-memory/index.ts
+
+# Against Neo4j instead of the in-memory graph:
+NEO4J_URI=bolt://localhost:7687 NEO4J_USER=neo4j NEO4J_PASSWORD=… node examples/05-background-graph-memory/index.ts
+```
+
+## What it demonstrates
+
+1. Agent runs that return in milliseconds while extraction happens later
+2. `FactExtractor` turning two conversations into facts, including a reinforced repeat
+3. `RelationshipBuilder` inferring a symmetric edge and two chain-rule edges
+4. `GraphMaintainer` merging `type-script` into `TypeScript` and resolving `LIVES_IN Paris` vs `LIVES_IN Berlin`
+5. A third, history-free run receiving the cleaned facts in its system prompt
+
+<BackgroundProcessesDiagram />
+
+## Key code
+
+```ts
+const store = await createAutoGraphMemoryStore();
+
+const memory = new LongTermMemory({
+  store,
+  model: extractorModel, // scripted: returns the facts for each conversation
+  relationships: { intervalMs: 400 },
+  maintenance: { intervalMs: 800 },
+});
+memory.on((event) => console.log(describe(event)));
+memory.start();
+
+await assistant.run("I'm working on Atlas with my colleague Raj. It runs on neo4j. I live in Paris and prefer type-script.", {
+  longTermMemory: memory,
+  sessionId: "chat-1",
+});
+await assistant.run("I just moved to Berlin. Atlas also uses TypeScript.", { longTermMemory: memory, sessionId: "chat-2" });
+
+// … wait for the processes, then a fresh run:
+for await (const event of assistant.stream("Help me plan a database migration.", { longTermMemory: memory })) { … }
+
+await memory.stop();
+await store.close();
+```
+
+## Output
+
+```text
+[run 1] returned in 3ms; extraction queued: 1
+  ⟳ [fact_extractor] fact_added: User WORKS_ON Atlas
+  ⟳ [fact_extractor] fact_added: User COLLEAGUE_OF Raj
+  ⟳ [fact_extractor] fact_added: Atlas USES neo4j
+  ⟳ [fact_extractor] fact_added: User LIVES_IN Paris
+  ⟳ [fact_extractor] fact_added: User PREFERS type-script
+  ⟳ [fact_extractor] pass done: 5 change(s) in 2ms
+
+[run 2] returned in 1ms
+  ⟳ [fact_extractor] fact_added: User LIVES_IN Berlin
+  ⟳ [fact_extractor] fact_added: Atlas USES TypeScript
+  ⟳ [fact_extractor] fact_reinforced: Atlas USES Neo4j
+  ⟳ [relationship_builder] relationship_inferred (symmetric): Raj COLLEAGUE_OF User @ 0.90
+  ⟳ [relationship_builder] relationship_inferred (works_on_uses): User USES Neo4j @ 0.93
+  ⟳ [relationship_builder] relationship_inferred (works_on_uses): User USES TypeScript @ 0.85
+  ⟳ [graph_maintainer] entities_merged: "type-script" → "TypeScript"
+  ⟳ [graph_maintainer] conflict_resolved: kept LIVES_IN Berlin, removed Paris
+
+--- Graph after background processing ---
+  (Atlas) -[USES]-> (Neo4j)   confidence=0.98 source=session:chat-2
+  (Atlas) -[USES]-> (TypeScript)   confidence=0.90 source=session:chat-2
+  (Raj) -[COLLEAGUE_OF]-> (User)   confidence=0.90 source=inferred:symmetric
+  (User) -[COLLEAGUE_OF]-> (Raj)   confidence=0.90 source=session:chat-1
+  (User) -[LIVES_IN]-> (Berlin)   confidence=0.95 source=session:chat-2
+  (User) -[PREFERS]-> (TypeScript)   confidence=0.80 source=session:chat-1
+  (User) -[USES]-> (Neo4j)   confidence=0.93 source=inferred:works_on_uses
+  (User) -[USES]-> (TypeScript)   confidence=0.85 source=inferred:works_on_uses
+  (User) -[WORKS_ON]-> (Atlas)   confidence=0.95 source=session:chat-1
+
+[run 3] New session, no chat history. User: Help me plan a database migration.
+  memory_updated: context_retrieved (6)
+  memory_updated: conversation_queued (2)
+```
+
+Timing and the exact order of background lines vary between runs, because the processes really are independent. With Neo4j, `Atlas USES neo4j` and `Atlas USES Neo4j` are stored separately until the maintainer merges them, because Neo4j entity names are case-sensitive.
+
+## Walkthrough
+
+- **Runs don't wait.** `run 1` returns while its conversation is still queued (`extraction queued: 1`).
+- **Reinforcement.** `Atlas USES Neo4j` was said in both conversations: confidence 0.9 combined with 0.8 gives 0.98.
+- **Inference.** `User WORKS_ON Atlas` plus `Atlas USES Neo4j` gives `User USES Neo4j` at 0.95 × 0.98 ≈ 0.93.
+- **Maintenance.** `LIVES_IN` is single-valued, so the newer Berlin replaces Paris. `type-script` and `TypeScript` share a key, so they become one entity.
+- **Retrieval.** Run 3 mentions none of these entities, but `User` is always looked up, so every fact about the user reaches the prompt, ranked by confidence.

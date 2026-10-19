@@ -33,8 +33,11 @@ SaGuSDK/
 │       ├── sqlite.ts          # SqliteSession (node:sqlite)
 │       ├── graphMemory.ts     # InMemoryGraphMemoryStore, createAutoGraphMemoryStore
 │       ├── neo4jGraphMemory.ts# Neo4jGraphMemoryStore
-│       └── graphMemoryTools.ts# remember_fact / recall_facts
-├── examples/                  # 01–04, runnable with node
+│       ├── graphMemoryTools.ts# remember_fact / recall_facts
+│       ├── facts.ts           # Normalization, confidence reinforcement & decay
+│       ├── graphProcesses.ts  # FactExtractor, RelationshipBuilder, GraphMaintainer
+│       └── longTermMemory.ts  # Coordinates the processes + retrieval
+├── examples/                  # 01–05, runnable with node
 ├── test/                      # node --test suites
 ├── docs/                      # Original Markdown docs (GitHub Pages)
 ├── PLAN.md                    # Design notes
@@ -50,7 +53,7 @@ This documentation site is a separate repository: [VeCtORbytes/SaGuDocs](https:/
 | **Agent configuration** | Immutable after `new Agent()` | `agent.ts`, `types.ts` (`AgentConfig`) |
 | **Run state** | One `run()`/`stream()` call | Local variables in `streamAgent()`: messages, turn, handoffCount, usage, trace |
 | **Session state** | Across runs, per `sessionId` | `memory/` session stores |
-| **Long-term memory** | Across sessions and agents | `memory/` graph stores, accessed via tools |
+| **Long-term memory** | Across sessions and agents | `memory/` graph stores, maintained by background processes, read via `LongTermMemory` or tools |
 
 ## Dependencies
 

@@ -14,15 +14,9 @@ These are all the `process.env` reads in `src/`:
 | `GEMINI_API_KEY` | `GeminiProvider` | API key when `apiKey` option is omitted |
 | `GOOGLE_API_KEY` | `GeminiProvider` | Used if `GEMINI_API_KEY` is unset |
 | `NEO4J_URI` | `createAutoGraphMemoryStore()` | If set, returns a Neo4j store instead of in-memory |
-| `NEO4J_USER` | `Neo4jGraphMemoryStore`, `createAutoGraphMemoryStore()` | Neo4j username (default `neo4j`) |
-| `NEO4J_USERNAME` | `createAutoGraphMemoryStore()` only | Alternative username name, see note below |
-| `NEO4J_PASSWORD` | `Neo4jGraphMemoryStore`, `createAutoGraphMemoryStore()` | Neo4j password |
-
-<Callout type="warn" title="Neo4j credentials come from the environment">
-  `Neo4jGraphMemoryStore` accepts `username` and `password` options, but its driver is created from `NEO4J_USER` and
-  `NEO4J_PASSWORD` in `process.env`. The options are currently ignored, and `NEO4J_USERNAME` is not read at connect
-  time. Set `NEO4J_USER` and `NEO4J_PASSWORD`.
-</Callout>
+| `NEO4J_USER` | `Neo4jGraphMemoryStore`, `createAutoGraphMemoryStore()` | Neo4j username when `username` isn't passed (default `neo4j`) |
+| `NEO4J_USERNAME` | same | Used if `NEO4J_USER` is unset |
+| `NEO4J_PASSWORD` | `Neo4jGraphMemoryStore`, `createAutoGraphMemoryStore()` | Neo4j password when `password` isn't passed |
 
 `redactSecrets()` also scans **all** environment variables. Any variable whose name looks sensitive (contains `secret`, `password`, `api_key`, `apikey`, `authorization`, ends in `_key` or `_token`, …) and whose value is at least 8 characters is replaced with `[REDACTED_SECRET]` wherever it appears in a trace.
 

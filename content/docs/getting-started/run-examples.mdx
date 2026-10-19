@@ -1,15 +1,16 @@
 ---
 title: Run the examples
-description: Run the four bundled examples. They work offline with the scripted mock model.
+description: Run the five bundled examples. They work offline with the scripted mock model.
 ---
 
-All four examples live in <Source path="examples" /> and use `mock()`, so they need no API keys or network. Run them from the repository root:
+All five examples live in <Source path="examples" /> and use `mock()`, so they need no API keys or network. Run them from the repository root:
 
 ```bash
 node examples/01-basic-tool-agent/index.ts
 node examples/02-support-triage-handoff/index.ts
 node examples/03-structured-output-and-memory/index.ts
 node examples/04-graph-memory-longterm-recall/index.ts
+node examples/05-background-graph-memory/index.ts
 ```
 
 | Example | Shows | Walkthrough |
@@ -18,6 +19,7 @@ node examples/04-graph-memory-longterm-recall/index.ts
 | `02-support-triage-handoff` | Handoffs between three agents, `agent.stream()` events | [Support triage handoff](/docs/examples/support-triage-handoff) |
 | `03-structured-output-and-memory` | `Agent<LeadProfile>`, schema repair, `SqliteSession` across two runs | [Structured output & memory](/docs/examples/structured-output-and-memory) |
 | `04-graph-memory-longterm-recall` | `createGraphMemoryTools`, `InMemoryGraphMemoryStore`, recall from a fresh agent | [Graph memory recall](/docs/examples/graph-memory-longterm-recall) |
+| `05-background-graph-memory` | `LongTermMemory`, the three background processes, context injection | [Background graph memory](/docs/examples/background-graph-memory) |
 
 ## Expected output of example 01
 

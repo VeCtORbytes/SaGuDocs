@@ -60,7 +60,7 @@ Implement this interface to back sessions with Redis, Postgres or anything else.
 ## How it works internally
 
 1. At run start, if **both** `sessionId` and `sessionStore` are set, the runner calls `getHistory()` (span `session_load`) and puts those messages first.
-2. On `run_completed`, it calls `appendMessages()` with everything from this run's user message onward (span `session_save`).
+2. On `run_completed`, it calls `appendMessages()` with everything from this run's user message onward (span `session_save`, event `memory_updated` with `operation: "session_saved"`).
 3. Store failures throw `MemoryError`, which the runner catches and returns as `run_failed`.
 
 ## Limitations and common mistakes

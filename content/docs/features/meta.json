@@ -1,1 +1,1 @@
-{ "title": "Core features", "pages": ["tools", "handoffs", "guardrails", "tool-approval", "structured-output", "session-memory", "graph-memory", "streaming", "tracing", "error-handling", "reliability", "providers"] }
+{ "title": "Core features", "pages": ["tools", "handoffs", "guardrails", "tool-approval", "structured-output", "session-memory", "graph-memory", "background-processes", "streaming", "tracing", "error-handling", "reliability", "providers"] }

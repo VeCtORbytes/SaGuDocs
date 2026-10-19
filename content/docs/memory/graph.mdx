@@ -7,18 +7,26 @@ Both stores implement:
 
 ```ts
 interface GraphMemoryStore {
-  remember(entry: { subject: string; predicate: string; object: string; metadata?: Record<string, unknown> }): Promise<void>;
+  remember(entry: GraphMemoryEntry): Promise<void>;     // upsert
   recall(query: { about: string; limit?: number }): Promise<GraphMemoryEntry[]>;
+  listFacts(): Promise<GraphMemoryEntry[]>;
+  forget(key: { subject: string; predicate: string; object: string }): Promise<void>;
+  mergeEntities(from: string, into: string): Promise<void>;
   close(): Promise<void>;
+}
+
+interface GraphMemoryEntry {
+  subject: string; predicate: string; object: string;
+  confidence?: number;   // 0..1, default 1
+  mentions?: number;     // maintained by the store
+  source?: string;       // "session:<id>", "tool:remember_fact", "inferred:<rule>", …
+  createdAt?: number;    // epoch ms, preserved on upsert
+  updatedAt?: number;    // epoch ms, refreshed on upsert unless given
+  metadata?: Record<string, unknown>;
 }
 ```
 
-Agents use them through `createGraphMemoryTools(store)`, and your own code can call `remember` and `recall` directly, for example to seed facts.
-
-<Callout type="warn">
-  Facts are written only when the model calls `remember_fact` or your code calls `store.remember()`. There is no
-  automatic extraction from conversations and no background maintenance (merging, pruning, confidence scoring).
-</Callout>
+Facts get written by the [background processes](/docs/features/background-processes) when you use `LongTermMemory`, by the `remember_fact` tool, or by your own `store.remember()` calls.
 
 ## InMemoryGraphMemoryStore
 
@@ -32,8 +40,9 @@ store.allEntries;                          // copy of every triplet
 ```
 
 - **Lifetime:** process memory only. **Facts do not survive a restart.**
-- **Dedupe:** an exact case-insensitive match on all three parts replaces the existing entry, updating its metadata.
-- **Recall:** case-insensitive; matches if the full `about` text is in `"subject predicate object"`, or **any word** of `about` is in any part. Returns at most `limit` (default 10) in insertion order. An empty `about` returns the first `limit` entries.
+- **Identity:** subject, predicate and object compared case-insensitively. Re-remembering a fact increments `mentions`, keeps `createdAt` and overwrites provided fields.
+- **Recall:** case-insensitive; matches if the full `about` text is in `"subject predicate object"`, or **any word** of `about` is in any part. Returns at most `limit` (default 10). An empty `about` returns the first `limit` facts.
+- **`mergeEntities(from, into)`** renames the exact name `from`; facts that become identical are combined (max confidence, summed mentions), and facts that become self-loops are dropped.
 
 ## Neo4jGraphMemoryStore
 
@@ -77,36 +86,43 @@ await store.close();
   type={{
     uri: { type: 'string', description: 'Bolt/Neo4j URI.', required: true },
     database: { type: 'string', description: 'Database name passed to driver.session().' },
-    username: { type: 'string', description: 'Accepted but currently ignored. Set NEO4J_USER.' },
-    password: { type: 'string', description: 'Accepted but currently ignored. Set NEO4J_PASSWORD.' },
+    username: { type: 'string', description: 'Basic-auth user.', default: 'NEO4J_USER ?? NEO4J_USERNAME' },
+    password: { type: 'string', description: 'Basic-auth password.', default: 'NEO4J_PASSWORD' },
     driver: { type: 'any', description: 'Inject an existing or mock neo4j driver (used in tests).' },
   }}
 />
 
-The driver is created lazily on the first `remember` or `recall`, with basic auth if `NEO4J_USER` or `NEO4J_PASSWORD` is set.
+The driver is created lazily on the first query, with basic auth when a username or password is available.
 
 ### Data model
 
 ```cypher
-// remember()
+// remember(): upsert
 MERGE (s:Entity { name: $subject })
 MERGE (o:Entity { name: $object })
 MERGE (s)-[r:RELATION { type: $predicate }]->(o)
-SET r.updatedAt = timestamp()
+ON CREATE SET r.createdAt = coalesce($createdAt, timestamp()), r.mentions = 0
+SET r.mentions = r.mentions + 1,
+    r.confidence = coalesce($confidence, r.confidence, 1.0),
+    r.source = coalesce($source, r.source),
+    r.updatedAt = coalesce($updatedAt, timestamp())
 
-// recall()
+// recall(): any term matches, highest confidence first
 MATCH (s:Entity)-[r:RELATION]->(o:Entity)
-WHERE toLower(s.name) CONTAINS toLower($about)
-   OR toLower(o.name) CONTAINS toLower($about)
-   OR toLower(r.type) CONTAINS toLower($about)
-RETURN s.name AS subject, r.type AS predicate, o.name AS object
-LIMIT $limit
+WHERE size($terms) = 0 OR any(t IN $terms WHERE
+  toLower(s.name) CONTAINS t OR toLower(o.name) CONTAINS t OR toLower(r.type) CONTAINS t)
+RETURN s.name AS subject, r.type AS predicate, o.name AS object, r.confidence AS confidence, …
+ORDER BY coalesce(r.confidence, 1.0) DESC
+LIMIT toInteger($limit)
 ```
 
 - Every node is an `:Entity` with a `name`; every edge is a `:RELATION` with a `type` property, not a native relationship type.
-- `MERGE` prevents exact duplicate nodes and edges. Names are **case-sensitive** here, unlike the in-memory store.
+- `MERGE` prevents exact duplicates. Entity names are **case-sensitive** here; the [maintainer](/docs/features/background-processes#3--graphmaintainer) merges case and spelling variants.
+- `forget` deletes the relationship, then any entity left without relationships.
+- `mergeEntities` moves each fact to the new name (combining with existing ones), then deletes the old node. It runs as several statements, not one transaction.
 - `metadata` is not persisted.
-- Recall uses the **whole** `about` string as one substring.
+
+Verified against Neo4j 5 by <Source path="test/neo4j.integration.test.ts" />, which runs when `NEO4J_URI` is set.
 
 Inspect the graph in Neo4j Browser (`http://localhost:7474`):
 

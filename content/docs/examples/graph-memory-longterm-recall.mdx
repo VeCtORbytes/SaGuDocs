@@ -60,5 +60,5 @@ Recalled Facts: {
 ## Walkthrough
 
 - `recall_facts({ about: "language database preference" })` matches **both** facts because the in-memory store matches any word (`language` → `PREFERS_LANGUAGE`, `database` → `PRIMARY_DATABASE`).
-- With `Neo4jGraphMemoryStore`, the same query would match **nothing**: Neo4j recall looks for the whole phrase as a substring. Prefer short entity-style queries like `"User"` if you plan to switch.
+- `Neo4jGraphMemoryStore` matches words the same way, and orders results by confidence.
 - The comment in the source mentions using Neo4j when `NEO4J_URI` is set. The example itself always constructs `InMemoryGraphMemoryStore`; use `createAutoGraphMemoryStore()` for env-based selection.

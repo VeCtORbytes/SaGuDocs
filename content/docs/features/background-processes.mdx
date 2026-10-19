@@ -1,0 +1,171 @@
+---
+title: Background graph processes
+description: Three independent processes that extract, link and maintain long-term graph memory.
+---
+
+## What it does
+
+`LongTermMemory` wraps a graph store with three background processes and a retrieval step for agents:
+
+| # | Process | Problem it solves | Graph changes |
+|---|---|---|---|
+| 1 | `FactExtractor` | Conversations contain facts nobody saved | `fact_added`, `fact_reinforced` |
+| 2 | `RelationshipBuilder` | Facts imply relationships nobody stated | `relationship_inferred`, `relationship_updated` |
+| 3 | `GraphMaintainer` | Graphs fill up with duplicates, contradictions and stale facts | `entities_merged`, `conflict_resolved`, `fact_pruned` |
+
+Each runs on its own timer, separately from the agent request/response loop.
+
+<BackgroundProcessesDiagram />
+
+## What problem it solves
+
+With only `remember_fact` / `recall_facts`, the graph grows only when the model decides to call a tool, and nothing cleans it up. `"TypeScript"` and `"typescript"` become two entities, an old address sits next to the new one, and facts from a year ago weigh as much as yesterday's. The processes make memory automatic and keep it trustworthy, without slowing down any agent run.
+
+## Example
+
+From <Source path="examples/05-background-graph-memory/index.ts" />:
+
+```ts
+import { Agent, LongTermMemory, createAutoGraphMemoryStore, anthropic } from "../src/index.ts";
+
+const store = await createAutoGraphMemoryStore(); // Neo4j if NEO4J_URI is set
+const memory = new LongTermMemory({
+  store,
+  model: anthropic(),                        // used by the fact extractor
+  relationships: { intervalMs: 30_000 },     // defaults shown
+  maintenance: { intervalMs: 60_000, halfLifeMs: 30 * 24 * 60 * 60 * 1000 },
+});
+
+memory.on((event) => {
+  if (event.type === "graph_updated") console.log(event.process, event.operation);
+  if (event.type === "process_failed") console.warn(event.process, event.error);
+});
+memory.start();
+
+const assistant = new Agent({ name: "Assistant", instructions: "Help the user.", model: anthropic() });
+
+await assistant.run("I just moved to Berlin and I'm working on Atlas.", {
+  longTermMemory: memory,
+  sessionId: "chat-1",
+});
+// returns immediately; extraction happens in the background
+
+await assistant.run("Plan my week.", { longTermMemory: memory }); // prompt now includes the facts
+
+await memory.stop(); // or memory.stop({ flush: true }) to finish queued work first
+await store.close();
+```
+
+Excerpt of the example's output (scripted models, no API key):
+
+```text
+[run 1] returned in 3ms; extraction queued: 1
+  ⟳ [fact_extractor] fact_added: User WORKS_ON Atlas
+  ⟳ [fact_extractor] fact_added: Atlas USES neo4j
+  ⟳ [fact_extractor] fact_added: User LIVES_IN Paris
+  ⟳ [fact_extractor] fact_added: User PREFERS type-script
+[run 2] returned in 1ms
+  ⟳ [fact_extractor] fact_added: User LIVES_IN Berlin
+  ⟳ [fact_extractor] fact_reinforced: Atlas USES Neo4j
+  ⟳ [relationship_builder] relationship_inferred (symmetric): Raj COLLEAGUE_OF User @ 0.90
+  ⟳ [relationship_builder] relationship_inferred (works_on_uses): User USES Neo4j @ 0.93
+  ⟳ [graph_maintainer] entities_merged: "type-script" → "TypeScript"
+  ⟳ [graph_maintainer] conflict_resolved: kept LIVES_IN Berlin, removed Paris
+```
+
+## How each process works
+
+### 1 · FactExtractor
+
+- **Input:** conversations queued by `memory.ingest(messages)`. The runner does this automatically after every successful run that has `longTermMemory` set. The queue is in memory.
+- **Kick:** `enqueue` schedules a run immediately; the interval (default 5 s) is a fallback.
+- **Extraction:** an internal SAGU `Agent` with a Zod `outputSchema` (`{ facts: [{ subject, predicate, object, confidence }] }`), so invalid JSON gets SAGU's repair loop. The prompt lists up to 100 existing entity names so the model reuses canonical names.
+- **Filtering:** names are trimmed, predicates become `UPPER_SNAKE_CASE`, self-loops (`User IS user`) and facts below `minConfidence` (default 0.5) are dropped.
+- **Reinforcement:** a fact that already exists gets `confidence = 1 − (1 − old)(1 − new)` (noisy-OR) and `mentions + 1`.
+- **Failures:** a conversation that fails (provider error, repair exhausted) is requeued and retried on the next pass, up to `maxAttempts` (default 3), then dropped with `process_failed { willRetry: false }`.
+
+### 2 · RelationshipBuilder
+
+- **Symmetric predicates** (default `KNOWS`, `FRIEND_OF`, `COLLEAGUE_OF`, `MARRIED_TO`, `SIBLING_OF`, `RELATED_TO`) get their reverse edge.
+- **Chain rules:** `A -[p1]-> B -[p2]-> C ⇒ A -[p3]-> C`. Defaults:
+
+| Rule | When | Then |
+|---|---|---|
+| `works_on_uses` | `WORKS_ON` + `USES` | `USES` |
+| `member_of_works_on` | `MEMBER_OF` + `WORKS_ON` | `WORKS_ON` |
+| `part_of_transitive` | `PART_OF` + `PART_OF` | `PART_OF` |
+
+- **Confidence** of an inferred fact is the product of its premises; its `updatedAt` is the newest premise's, so it ages with the facts it came from.
+- **No meaningless or duplicate edges:** self-loops, facts below `minConfidence` (0.5) and any fact that already exists (compared ignoring case, spaces and punctuation) are skipped.
+- **Never overrides stated facts.** It only updates facts whose `source` starts with `inferred:`, and only when the premises got fresher or their confidence changed.
+
+### 3 · GraphMaintainer
+
+Runs three steps in order:
+
+1. **Merge duplicates.** Entities whose names match ignoring case, whitespace, `-`, `_` and `.` (`TypeScript` / `type-script` / `Type Script`, `Node.js` / `NodeJS`) are merged into the most-used name, preferring the variant with more capitals. `C`, `C#` and `C++` stay distinct.
+2. **Resolve conflicts.** For single-valued predicates (default `LIVES_IN`, `WORKS_AT`, `HAS_ROLE`, `HAS_TITLE`, `REPORTS_TO`, `AGE`), only the most recently updated value is kept.
+3. **Prune.** Confidence decays with a half-life (default 30 days) since the fact was last asserted: `confidence × 0.5^(age / halfLife)`. Facts below `pruneBelow` (default 0.2) are removed, reported as `stale` (decayed) or `low_confidence` (weak from the start).
+
+## Retrieval
+
+Before the first model call, the runner calls `memory.retrieveContext(input)`:
+
+1. Keywords: words of 3+ letters from the input that aren't stopwords, plus `alwaysInclude` (default `["User"]`).
+2. One `store.recall()` call matching any keyword.
+3. Rank by time-decayed confidence, drop below `retrieval.minConfidence` (0.3), keep the top `retrieval.limit` (8).
+4. Append them to the system prompt:
+
+```text
+[LONG-TERM MEMORY]
+Facts remembered from earlier conversations. Use them when relevant:
+- User LIVES_IN Berlin (confidence 0.95)
+- User WORKS_ON Atlas (confidence 0.95)
+```
+
+If retrieval or ingestion throws, the run **continues**: the error is recorded on the `memory_read` / `memory_write` span.
+
+## Observability
+
+| Where | What you see |
+|---|---|
+| `memory.on(listener)` | `graph_updated` (one per change, with `process` and `operation`), `process_completed` (`changes`, `durationMs`, `traceId`), `process_failed` (`error`, `attempt`, `willRetry`) |
+| `agent.stream()` | `memory_updated` with `operation`: `context_retrieved`, `session_saved` or `conversation_queued` |
+| Run trace | `memory_read` (`factCount`), `memory_write` (`queuedMessages`) spans |
+| `traceExporter` on `LongTermMemory` | One trace per process pass: a `graph_process` root span with a `graph_update` child per change, plus `extract_conversation` spans |
+
+## Configuration
+
+<TypeTable
+  type={{
+    store: { type: 'GraphMemoryStore', description: 'InMemoryGraphMemoryStore or Neo4jGraphMemoryStore (or your own).', required: true },
+    model: { type: 'ModelProvider', description: 'Model for the fact extractor. Can differ from your agents’ model.', required: true },
+    extractor: { type: '{ intervalMs?, minConfidence?, batchSize?, maxAttempts?, instructions?, maxRetries? }', description: 'Defaults: 5000 ms, 0.5, 5, 3.' },
+    relationships: { type: '{ intervalMs?, rules?, symmetricPredicates?, minConfidence?, maxRetries? }', description: 'Defaults: 30000 ms, DEFAULT_INFERENCE_RULES, DEFAULT_SYMMETRIC_PREDICATES, 0.5.' },
+    maintenance: { type: '{ intervalMs?, halfLifeMs?, pruneBelow?, singleValuedPredicates?, maxRetries? }', description: 'Defaults: 60000 ms, 30 days, 0.2, DEFAULT_SINGLE_VALUED_PREDICATES.' },
+    retrieval: { type: '{ limit?, minConfidence?, alwaysInclude? }', description: 'Defaults: 8, 0.3, ["User"].' },
+    traceExporter: { type: 'TraceExporter', description: 'Receives one trace per process pass.' },
+  }}
+/>
+
+Lifecycle: `start()`, `stop({ flush? })`, `flush()` (drain the queue, then run each process once, in order), `ingest(messages, { sessionId })`, `retrieveContext(input)`, `on(listener)` (returns an unsubscribe function). The processes are also exposed individually as `memory.extractor`, `memory.relationshipBuilder` and `memory.maintainer`, each with `start()`, `stop()` and `runOnce()`.
+
+## Guarantees
+
+- **Never blocks a run.** `ingest` is a synchronous queue push. Extraction happens later.
+- **No overlapping passes.** Calling `runOnce()` while a pass is running returns that same pass.
+- **Transient errors retried.** Each pass is wrapped in `withRetry` (default 2 retries) using `isTransientError`. Other errors emit `process_failed`, and the loop continues on the next interval.
+- **Keeps Node alive while started**, like a database pool. Call `stop()` to let the process exit.
+
+## Limitations
+
+- **The extraction queue is in memory.** Conversations queued but not yet extracted are lost if the process crashes.
+- **Single process.** Two Node processes running `LongTermMemory` on one Neo4j database will both run maintenance; there's no distributed lock.
+- **Processes don't coordinate.** A maintenance pass can run while extraction writes. Changes still converge on the next pass.
+- **Retrieval is keyword-based**, not semantic search: "car" won't find "vehicle".
+- **Neo4j entity names are case-sensitive**, so `neo4j` and `Neo4j` are separate until the maintainer merges them. The in-memory store treats facts case-insensitively.
+- **Neo4j merges are not transactional.** A crash mid-merge leaves both nodes; the next pass finishes the merge.
+
+## Related source
+
+<SourceList paths={["src/memory/graphProcesses.ts", "src/memory/longTermMemory.ts", "src/memory/facts.ts", "src/runner.ts", "test/graph_processes.test.ts", "test/neo4j.integration.test.ts", "examples/05-background-graph-memory/index.ts"]} />

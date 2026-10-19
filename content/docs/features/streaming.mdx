@@ -36,10 +36,13 @@ for await (const event of agent.stream("What is 125 * 8?")) {
 | `tool_end` | `toolCallId`, `name`, `result`, `isError` | After execution, or after any error result |
 | `handoff` | `fromAgent`, `toAgent`, `reason?` | A `transfer_to_*` tool is called (before the limit check) |
 | `guardrail_triggered` | `stage`, `reason`, `action`, `toolName?` | A guardrail blocks or modifies |
+| `memory_updated` | `operation`, `count` | `context_retrieved` (long-term facts read), `session_saved`, `conversation_queued` (sent to background extraction) |
 | `run_completed` | `output`, `messages`, `usage`, `agentName`, `turns`, `trace?` | Terminal: success |
 | `run_failed` | `error`, `messages`, `usage`, `agentName`, `turns`, `trace?` | Terminal: failure |
 
-Exactly one terminal event ends every stream. Type guards: `isTextDelta`, `isToolStart`, `isToolEnd`, `isHandoff`, `isGuardrailTriggered`, `isRunCompleted`, `isRunFailed`.
+Exactly one terminal event ends every stream. Type guards: `isTextDelta`, `isToolStart`, `isToolEnd`, `isHandoff`, `isGuardrailTriggered`, `isMemoryUpdated`, `isRunCompleted`, `isRunFailed`.
+
+Graph changes made by background processes happen **outside** any run, so they're not in this stream. Subscribe with `memory.on(listener)` to get `graph_updated` events. See [Background graph processes](/docs/features/background-processes#observability).
 
 ## How it works internally
 
@@ -48,7 +51,7 @@ When the active provider has a `stream()` method, the runner reads its chunks an
 ## Limitations
 
 - **Real providers don't stream tokens yet.** `AnthropicProvider`, `OpenAIProvider` and `GeminiProvider` implement `stream()` by awaiting `generate()` and yielding the entire text as **one** `text_delta`. `MockProvider` splits text by spaces to simulate streaming.
-- **No memory or graph events.** There are no `memory_updated` / `graph_updated` events. Session I/O is visible only in the trace (`session_load`, `session_save`).
+- **Session loads have no event**; only saves emit `memory_updated`. The `session_load` span is in the trace.
 - **Intermediate text is streamed too.** Text from tool-calling turns and raw JSON from structured-output turns arrive as `text_delta`, so filter before showing it to users.
 - **Invalid-JSON tool arguments** produce a `tool_end` with no preceding `tool_start`.
 - **Handoff tool calls** produce a `handoff` event, not `tool_start`/`tool_end`.

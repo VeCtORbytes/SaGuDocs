@@ -254,9 +254,10 @@ export function MemoryDiagram() {
       label="Diagram C: session history and graph memory are separate systems"
       caption={
         <>
-          Session history is wired into the runner through <Code>RunOptions</Code>. Graph memory is not: the model reaches
-          it only by calling the <Code>remember_fact</Code> / <Code>recall_facts</Code> tools created by{' '}
-          <Code>createGraphMemoryTools(store)</Code>. Nothing extracts facts automatically.
+          Session history is loaded and saved by the runner through <Code>RunOptions.sessionStore</Code>. Graph memory is
+          reached two ways: automatically through <Code>RunOptions.longTermMemory</Code> (facts injected into the prompt,
+          conversations extracted in the background), or explicitly through the <Code>remember_fact</Code> /{' '}
+          <Code>recall_facts</Code> tools.
         </>
       }
     >
@@ -282,12 +283,13 @@ export function MemoryDiagram() {
         </div>
         <div className="grid content-start gap-2">
           <Box tone="tool" kicker="GraphMemoryStore · long-term facts" title="What is true, as triplets">
-            <Code>subject → predicate → object</Code>, shared across sessions and agents that hold the same store.
+            <Code>subject → predicate → object</Code> with confidence, mentions, source and timestamps. Shared across
+            sessions and agents; kept clean by three background processes.
           </Box>
           <ul className="grid gap-2">
             <li>
               <Box tone="muted" title="InMemoryGraphMemoryStore">
-                Array in memory; lost on restart. Case-insensitive dedupe of identical triplets.
+                In process memory; lost on restart. Case-insensitive fact identity.
               </Box>
             </li>
             <li>
@@ -341,6 +343,59 @@ export function HandoffDiagram() {
           and a <Code>handoff</Code> trace span.
         </Box>
       </div>
+    </Figure>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Diagram E — background graph processes                              */
+/* ------------------------------------------------------------------ */
+
+export function BackgroundProcessesDiagram() {
+  return (
+    <Figure
+      label="Diagram E: long-term memory with three background processes"
+      caption={
+        <>
+          The agent run only does two cheap things: read ranked facts before the first model call, and push the finished
+          conversation onto a queue. Everything that changes the graph happens in the three processes, each on its own
+          timer, outside any run.
+        </>
+      }
+    >
+      <div className="grid gap-3 md:grid-cols-[1fr_auto_1.3fr] md:items-start">
+        <div className="grid gap-2">
+          <Box tone="app" kicker="agent run" title="agent.run(input, { longTermMemory })">
+            <span className="block">① <Code>retrieveContext(input)</Code> → facts added to the system prompt</span>
+            <span className="block">② on success, <Code>ingest(messages)</Code> → queue (not awaited)</span>
+          </Box>
+          <Box tone="store" kicker="GraphMemoryStore" title="Neo4j or in-memory graph">
+            Facts with confidence, mentions, source, createdAt, updatedAt.
+          </Box>
+        </div>
+        <Arrow responsive label="queue" />
+        <ol className="grid gap-2">
+          <li>
+            <Box tone="tool" kicker="process 1 · kicked by new work" title="FactExtractor">
+              LLM reads the conversation → adds facts, or reinforces repeated ones. Drops self-loops and low-confidence
+              facts.
+            </Box>
+          </li>
+          <li>
+            <Box tone="tool" kicker="process 2 · every 30 s" title="RelationshipBuilder">
+              Infers edges: symmetric predicates (KNOWS) and chain rules (WORKS_ON + USES ⇒ USES). No duplicates.
+            </Box>
+          </li>
+          <li>
+            <Box tone="tool" kicker="process 3 · every 60 s" title="GraphMaintainer">
+              Merges duplicate entities, keeps the newest value of single-valued predicates, prunes decayed facts.
+            </Box>
+          </li>
+        </ol>
+      </div>
+      <p className="mt-3 text-center font-mono text-[11px] text-fd-muted-foreground">
+        every change → graph_updated event + trace span · failures → process_failed + retry
+      </p>
     </Figure>
   );
 }

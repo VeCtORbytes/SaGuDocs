@@ -1,6 +1,6 @@
 ---
 title: Examples
-description: Four runnable examples from the repository, all offline with the scripted mock model.
+description: Five runnable examples from the repository, all offline with the scripted mock model.
 ---
 
 Each example is a single `index.ts` in <Source path="examples" />. They use `mock()` so they run without API keys:
@@ -14,19 +14,21 @@ node examples/01-basic-tool-agent/index.ts
   <Card title="02 · Support triage handoff" href="/docs/examples/support-triage-handoff" description="Three agents, handoff routing, stream() events." />
   <Card title="03 · Structured output & memory" href="/docs/examples/structured-output-and-memory" description="Agent<LeadProfile>, schema repair, SqliteSession." />
   <Card title="04 · Graph memory recall" href="/docs/examples/graph-memory-longterm-recall" description="remember_fact / recall_facts across agents." />
+  <Card title="05 · Background graph memory" href="/docs/examples/background-graph-memory" description="LongTermMemory and the three background processes, live." />
 </Cards>
 
 ## Feature coverage
 
-| Feature | 01 | 02 | 03 | 04 |
-|---|:-:|:-:|:-:|:-:|
-| Tools (`defineTool`) | ✓ | ✓ | | ✓ (generated) |
-| `agent.run()` | ✓ | | ✓ | ✓ |
-| `agent.stream()` | | ✓ | | |
-| Handoffs | | ✓ | | |
-| Structured output + repair | | | ✓ | |
-| Session store | | | ✓ (`SqliteSession`) | |
-| Graph memory | | | | ✓ |
-| Tracing exporter | ✓ | | | |
+| Feature | 01 | 02 | 03 | 04 | 05 |
+|---|:-:|:-:|:-:|:-:|:-:|
+| Tools (`defineTool`) | ✓ | ✓ | | ✓ (generated) | |
+| `agent.run()` | ✓ | | ✓ | ✓ | ✓ |
+| `agent.stream()` | | ✓ | | | ✓ |
+| Handoffs | | ✓ | | | |
+| Structured output + repair | | | ✓ | | ✓ (extractor) |
+| Session store | | | ✓ (`SqliteSession`) | | |
+| Graph memory | | | | ✓ (tools) | ✓ (automatic) |
+| Background graph processes | | | | | ✓ |
+| Tracing exporter | ✓ | | | | |
 
 Not covered by an example: guardrails, tool approval, fallback, real providers. See the [feature pages](/docs/features/guardrails) for snippets.

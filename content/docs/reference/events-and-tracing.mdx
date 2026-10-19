@@ -12,11 +12,14 @@ type AgentEvent<TOutput = any> =
   | { type: "tool_end"; toolCallId: string; name: string; result: unknown; isError: boolean }
   | { type: "handoff"; fromAgent: string; toAgent: string; reason?: string }
   | { type: "guardrail_triggered"; stage: "input" | "output" | "tool"; reason: string; action: "blocked" | "modified"; toolName?: string }
+  | { type: "memory_updated"; operation: "context_retrieved" | "session_saved" | "conversation_queued"; count: number }
   | { type: "run_completed"; output: TOutput; messages: Message[]; usage: TokenUsage; agentName: string; turns: number; trace?: Trace }
   | { type: "run_failed"; error: SaguError; messages: Message[]; usage: TokenUsage; agentName: string; turns: number; trace?: Trace };
 ```
 
-Type guards, each `(event: AgentEvent) => event is …`: `isTextDelta`, `isToolStart`, `isToolEnd`, `isHandoff`, `isGuardrailTriggered`, `isRunCompleted<T>`, `isRunFailed`.
+Type guards, each `(event: AgentEvent) => event is …`: `isTextDelta`, `isToolStart`, `isToolEnd`, `isHandoff`, `isGuardrailTriggered`, `isMemoryUpdated`, `isRunCompleted<T>`, `isRunFailed`.
+
+Background graph events (`GraphEvent`) are documented under [Memory → Graph events](/docs/reference/memory#graph-events).
 
 ## Trace types
 
