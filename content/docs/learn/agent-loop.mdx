@@ -1,0 +1,46 @@
+---
+title: How the SAGU agent loop works
+description: A guided walk through streamAgent() in src/runner.ts.
+---
+
+Everything below is in `streamAgent()` in <Source path="src/runner.ts" />. `agent.run()` calls `runAgent()`, which consumes the same generator and keeps the final `run_completed` or `run_failed` event as its result.
+
+<RuntimeDiagram />
+
+## Before the loop
+
+1. **Create run state.** A fresh `runId` (UUID), a `TraceRecorder` with a root `agent_run` span, an empty `messages` array, zeroed `usage`, and counters for `turn`, `handoffCount` and `repairAttempts`. Limits are fixed here: `maxTurns` and `maxHandoffs` come from `RunOptions` if set, otherwise from the starting agent. `maxRepairAttempts` always comes from the starting agent.
+2. **Load history.** If you passed both `sessionId` and `sessionStore`, `getHistory(sessionId)` is prepended (span `session_load`). Then any `initialMessages` you passed are appended.
+3. **Input guardrails.** Each of the starting agent's `inputGuardrails` runs in order. A failing guardrail ends the run with `GuardrailError` (stage `input`); a guardrail that returns `modified` replaces the input for the guardrails that follow and for the model.
+4. **Append the user message** with the final input text.
+
+## Each turn
+
+While `turn < maxTurns`:
+
+1. **Abort check.** If `options.signal` is aborted, the run fails.
+2. **Resolve instructions.** A string is used as-is. A function is called with `{ runId, agentName, sessionId, turn }`. If the active agent has an `outputSchema`, its JSON Schema is appended to the instructions as a `[STRUCTURED OUTPUT REQUIREMENT]` block.
+3. **Build tool specs.** The agent's own tools plus one synthetic `transfer_to_<agent>` tool per handoff target, each with a JSON Schema generated from its Zod schema.
+4. **Call the model** (span `model_call`). If the provider implements `stream()`, the runner uses it and yields a `text_delta` for each text chunk. Otherwise it calls `generate()` wrapped in `withRetry` (3 retries, 200 ms initial delay) and yields the whole text as one `text_delta`.
+5. **Accumulate token usage** if the provider returned any.
+6. **Branch on the response:**
+   - **Tool calls present** → handle each call ([details](/docs/learn/tool-calls)), then go to the next turn.
+   - **No tool calls** → treat the text as a final-answer candidate, as described below.
+
+## Finishing
+
+1. **Structured output.** If there is an `outputSchema`, the text is parsed and validated. On failure, and if `repairAttempts < maxRepairAttempts`, the runner appends the bad answer and a repair prompt listing the Zod issues, then **starts another turn**. Once attempts are exhausted, the run fails with `StructuredOutputError`.
+2. **Output guardrails** run on the raw text. A block fails the run with `GuardrailError` (stage `output`); `modified` replaces the text.
+3. **Save the session.** The messages from this run (from the user message onwards) are appended to the store (span `session_save`).
+4. **Yield `run_completed`** with `output` (the parsed object, or the possibly-modified text), `messages`, `usage`, the active `agentName`, `turns` and the redacted `trace`.
+
+If the loop exits because `turn` reached `maxTurns`, the run fails with `MaxTurnsExceededError`. Any unexpected exception, such as a provider error or a `MemoryError` from a session store, is caught and returned as `run_failed`. Non-SAGU errors are wrapped as a `SaguError` with code `SAGU_PROVIDER_ERROR`.
+
+## Things that are easy to miss
+
+- **Turns are shared across handoffs** and **include repair retries**. A run with two handoffs, two tool rounds and one repair uses at least six turns.
+- **Input guardrails run once**, for the starting agent. Output guardrails come from whichever agent is active at the end.
+- **`text_delta` fires on every turn that has text**, including non-final turns and raw JSON under `outputSchema`. Don't treat every delta as user-facing.
+- **Sessions are saved only on success.**
+
+Next: [How model providers fit into the architecture](/docs/learn/providers)

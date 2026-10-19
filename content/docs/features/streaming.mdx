@@ -1,0 +1,58 @@
+---
+title: Streaming and events
+description: Iterate agent.stream() to observe text, tools, handoffs and guardrails as they happen.
+---
+
+## What it does
+
+`agent.stream(input, options)` is an async generator of `AgentEvent`s. It's the same loop as `agent.run()`, which simply drains this stream and returns the last event as a `RunResult`.
+
+## What problem it solves
+
+Long runs feel frozen without feedback, and debugging needs to know *when* each tool ran. Events give you a UI-ready timeline without callbacks or emitters.
+
+## Example
+
+```ts
+import { isTextDelta, isToolStart, isToolEnd } from "../src/index.ts";
+
+for await (const event of agent.stream("What is 125 * 8?")) {
+  if (isTextDelta(event)) process.stdout.write(event.text);
+  else if (isToolStart(event)) console.log(`\n→ ${event.name}(${JSON.stringify(event.arguments)})`);
+  else if (isToolEnd(event)) console.log(`← ${event.name}`, event.isError ? "ERROR" : "ok", event.result);
+  else if (event.type === "handoff") console.log(`⇢ ${event.fromAgent} → ${event.toAgent}`);
+  else if (event.type === "guardrail_triggered") console.log(`⛔ ${event.stage}: ${event.reason} (${event.action})`);
+  else if (event.type === "run_completed") console.log("\ndone in", event.turns, "turns");
+  else if (event.type === "run_failed") console.error(event.error.code, event.error.message);
+}
+```
+
+## Event reference
+
+| `type` | Fields | Emitted when |
+|---|---|---|
+| `text_delta` | `text` | A text chunk arrives from the model, on **any** turn |
+| `tool_start` | `toolCallId`, `name`, `arguments` | Before a non-handoff tool call is looked up and checked |
+| `tool_end` | `toolCallId`, `name`, `result`, `isError` | After execution, or after any error result |
+| `handoff` | `fromAgent`, `toAgent`, `reason?` | A `transfer_to_*` tool is called (before the limit check) |
+| `guardrail_triggered` | `stage`, `reason`, `action`, `toolName?` | A guardrail blocks or modifies |
+| `run_completed` | `output`, `messages`, `usage`, `agentName`, `turns`, `trace?` | Terminal: success |
+| `run_failed` | `error`, `messages`, `usage`, `agentName`, `turns`, `trace?` | Terminal: failure |
+
+Exactly one terminal event ends every stream. Type guards: `isTextDelta`, `isToolStart`, `isToolEnd`, `isHandoff`, `isGuardrailTriggered`, `isRunCompleted`, `isRunFailed`.
+
+## How it works internally
+
+When the active provider has a `stream()` method, the runner reads its chunks and yields `text_delta` for each `text_delta` chunk. The generator's return value is the full `ProviderResponse` (including tool calls). Without `stream()`, the runner calls `generate()` and yields the full text once.
+
+## Limitations
+
+- **Real providers don't stream tokens yet.** `AnthropicProvider`, `OpenAIProvider` and `GeminiProvider` implement `stream()` by awaiting `generate()` and yielding the entire text as **one** `text_delta`. `MockProvider` splits text by spaces to simulate streaming.
+- **No memory or graph events.** There are no `memory_updated` / `graph_updated` events. Session I/O is visible only in the trace (`session_load`, `session_save`).
+- **Intermediate text is streamed too.** Text from tool-calling turns and raw JSON from structured-output turns arrive as `text_delta`, so filter before showing it to users.
+- **Invalid-JSON tool arguments** produce a `tool_end` with no preceding `tool_start`.
+- **Handoff tool calls** produce a `handoff` event, not `tool_start`/`tool_end`.
+
+## Related source
+
+<SourceList paths={["src/events.ts", "src/runner.ts", "src/providers/mock.ts", "test/events.test.ts"]} />

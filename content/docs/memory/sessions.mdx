@@ -1,0 +1,92 @@
+---
+title: Session stores
+description: InMemorySession, FileSession and SqliteSession, with their lifetimes and options.
+---
+
+All session stores implement `getHistory`, `appendMessages` and `clear`, and are used the same way:
+
+```ts
+await agent.run(input, { sessionId: "user-42", sessionStore: store });
+```
+
+## InMemorySession
+
+```ts
+import { InMemorySession } from "../src/index.ts";
+
+const store = new InMemorySession({ maxMessagesPerSession: 50 });
+await store.clearAll(); // extra method: wipe every session
+```
+
+- **Lifetime:** until the process exits. Not shared between processes.
+- **`maxMessagesPerSession`:** after each append, drops the oldest messages beyond N. This can leave a `tool` message without its preceding tool call.
+- `getHistory` returns a copy.
+
+## FileSession
+
+```ts
+import { FileSession } from "../src/index.ts";
+
+const store = new FileSession({ storageDir: "./.sagu_sessions" }); // default directory
+```
+
+- **Lifetime:** on disk until deleted. One pretty-printed JSON file per session: `<storageDir>/<sanitizedId>.json`.
+- **IDs are sanitized:** characters outside `[a-zA-Z0-9_-]` become `_`.
+- **Writes** read the whole file, append, and rewrite it. There's no locking, so avoid concurrent writers on the same session.
+- `clear(id)` deletes the file. Errors are wrapped in `MemoryError("FileSession", op, …)`.
+- Consider adding the directory to `.gitignore`. The repository's ignore file doesn't cover `.sagu_sessions`.
+
+## SqliteSession
+
+```ts
+import { SqliteSession } from "../src/index.ts";
+
+const store = new SqliteSession({ filename: "./sessions.db" }); // default ":memory:"
+// …
+store.close(); // synchronous; closes the database handle
+```
+
+- **Requires** Node.js with the built-in `node:sqlite` module. No npm dependency.
+- **Lifetime:** persistent with a file path. With `:memory:` (the **default**) it's gone when the store is closed or the process exits.
+- **Schema** (created automatically):
+
+```sql
+CREATE TABLE IF NOT EXISTS sagu_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT NOT NULL,
+  role TEXT NOT NULL,
+  content TEXT NOT NULL,
+  name TEXT,
+  tool_calls TEXT,   -- JSON
+  tool_result TEXT,  -- JSON
+  metadata TEXT,     -- JSON
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sagu_messages_session ON sagu_messages(session_id);
+```
+
+- History is returned `ORDER BY id ASC`. Malformed JSON columns are skipped silently.
+- The constructor throws `MemoryError` if the database can't be opened.
+
+## Writing your own
+
+```ts
+import type { Message, SessionStore } from "../src/index.ts";
+
+class RedisSession implements SessionStore {
+  constructor(private redis: { lrange(k: string, a: number, b: number): Promise<string[]>; rpush(k: string, ...v: string[]): Promise<number>; del(k: string): Promise<number> }) {}
+  async getHistory(id: string): Promise<Message[]> {
+    return (await this.redis.lrange(`sagu:${id}`, 0, -1)).map((s) => JSON.parse(s));
+  }
+  async appendMessages(id: string, messages: Message[]) {
+    if (messages.length) await this.redis.rpush(`sagu:${id}`, ...messages.map((m) => JSON.stringify(m)));
+  }
+  async clear(id: string) {
+    await this.redis.del(`sagu:${id}`);
+  }
+}
+```
+
+This is an illustration of the interface, not a shipped or tested adapter.
+
+<SourceList paths={["src/memory/inMemory.ts", "src/memory/file.ts", "src/memory/sqlite.ts", "src/memory/types.ts", "test/memory.test.ts"]} />

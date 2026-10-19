@@ -1,0 +1,73 @@
+---
+title: Memory
+description: Session stores, graph memory stores and graph memory tools.
+---
+
+## Interfaces
+
+```ts
+interface SessionStore {
+  getHistory(sessionId: string): Promise<Message[]>;
+  appendMessages(sessionId: string, messages: Message[]): Promise<void>;
+  clear(sessionId: string): Promise<void>;
+}
+
+interface GraphMemoryEntry { subject: string; predicate: string; object: string; metadata?: Record<string, unknown>; }
+interface GraphMemoryQuery { about: string; limit?: number; }
+
+interface GraphMemoryStore {
+  remember(entry: GraphMemoryEntry): Promise<void>;
+  recall(query: GraphMemoryQuery): Promise<GraphMemoryEntry[]>;
+  close(): Promise<void>;
+}
+```
+
+## Session stores
+
+```ts
+new InMemorySession(options?: { maxMessagesPerSession?: number })
+  // + clearAll(): Promise<void>
+
+new FileSession(options?: { storageDir?: string })          // default "./.sagu_sessions"
+  // readonly storageDir: string
+
+new SqliteSession(options?: { filename?: string })          // default ":memory:"
+  // readonly filename: string; close(): void
+```
+
+Option types: `InMemorySessionOptions`, `FileSessionOptions`, `SqliteSessionOptions`.
+
+## Graph memory stores
+
+```ts
+new InMemoryGraphMemoryStore()
+  // get allEntries(): GraphMemoryEntry[]
+
+new Neo4jGraphMemoryStore(options: Neo4jGraphMemoryOptions)
+  // readonly uri: string; readonly database?: string
+
+interface Neo4jGraphMemoryOptions {
+  uri: string;
+  username?: string;   // currently ignored; NEO4J_USER is used
+  password?: string;   // currently ignored; NEO4J_PASSWORD is used
+  database?: string;
+  driver?: any;
+}
+
+function createAutoGraphMemoryStore(): Promise<GraphMemoryStore>;
+// NEO4J_URI set → Neo4jGraphMemoryStore, otherwise InMemoryGraphMemoryStore
+```
+
+## Graph memory tools
+
+```ts
+function createGraphMemoryTools(store: GraphMemoryStore): Tool[];
+// [remember_fact, recall_facts]
+```
+
+| Tool | Input | Returns |
+|---|---|---|
+| `remember_fact` | `{ subject: string; predicate: string; object: string }` | `{ stored: true, fact, message }` |
+| `recall_facts` | `{ about: string; limit?: number /* default 5 */ }` | `{ count, facts: GraphMemoryEntry[], summary }` |
+
+<SourceList paths={["src/memory/types.ts", "src/memory/inMemory.ts", "src/memory/file.ts", "src/memory/sqlite.ts", "src/memory/graphMemory.ts", "src/memory/neo4jGraphMemory.ts", "src/memory/graphMemoryTools.ts"]} />

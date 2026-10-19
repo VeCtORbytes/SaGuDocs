@@ -1,0 +1,64 @@
+---
+title: "04 · Graph memory recall"
+description: One agent stores facts; a second agent with no chat history recalls them.
+---
+
+<Source path="examples/04-graph-memory-longterm-recall/index.ts" />
+
+```bash
+node examples/04-graph-memory-longterm-recall/index.ts
+```
+
+## What it demonstrates
+
+1. Storing triplets with the `remember_fact` tool
+2. Recalling them from a different agent, in a run with no session history, using `recall_facts`
+3. The same `createGraphMemoryTools(store)` tools shared by both agents
+
+## Key code
+
+```ts
+const graphStore = new InMemoryGraphMemoryStore();
+const graphTools = createGraphMemoryTools(graphStore);
+
+const session1Agent = new Agent({
+  name: "ProfileCollector",
+  instructions: "When users state preferences or project details, store them in long-term memory using remember_fact.",
+  model: mock([
+    { toolCalls: [{ id: "call_rem_1", name: "remember_fact", arguments: { subject: "User", predicate: "PREFERS_LANGUAGE", object: "TypeScript" } }] },
+    { toolCalls: [{ id: "call_rem_2", name: "remember_fact", arguments: { subject: "User", predicate: "PRIMARY_DATABASE", object: "PostgreSQL with Neo4j" } }] },
+    "I have stored your preferences for TypeScript and PostgreSQL with Neo4j in long-term memory.",
+  ]),
+  tools: graphTools,
+});
+
+const session2Agent = new Agent({
+  name: "ArchitectAssistant",
+  instructions: "Before designing architectures, consult long-term memory using recall_facts.",
+  model: mock([
+    { toolCalls: [{ id: "call_rec_1", name: "recall_facts", arguments: { about: "language database preference" } }] },
+    "Based on your profile in memory, I recommend … TypeScript … PostgreSQL … Neo4j …",
+  ]),
+  tools: graphTools,
+});
+```
+
+## Output (abridged)
+
+```text
+Current Graph Triplet Count: 2
+  ( :User ) -[ :PREFERS_LANGUAGE ]-> ( :TypeScript )
+  ( :User ) -[ :PRIMARY_DATABASE ]-> ( :PostgreSQL with Neo4j )
+
+Recalled Facts: {
+  count: 2,
+  facts: [ … ],
+  summary: '• User PREFERS_LANGUAGE TypeScript\n• User PRIMARY_DATABASE PostgreSQL with Neo4j'
+}
+```
+
+## Walkthrough
+
+- `recall_facts({ about: "language database preference" })` matches **both** facts because the in-memory store matches any word (`language` → `PREFERS_LANGUAGE`, `database` → `PRIMARY_DATABASE`).
+- With `Neo4jGraphMemoryStore`, the same query would match **nothing**: Neo4j recall looks for the whole phrase as a substring. Prefer short entity-style queries like `"User"` if you plan to switch.
+- The comment in the source mentions using Neo4j when `NEO4J_URI` is set. The example itself always constructs `InMemoryGraphMemoryStore`; use `createAutoGraphMemoryStore()` for env-based selection.

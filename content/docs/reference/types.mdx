@@ -1,0 +1,40 @@
+---
+title: Core types
+description: Message, ToolCall, ToolResult, TokenUsage and Role.
+---
+
+```ts
+type Role = "system" | "user" | "assistant" | "tool";
+
+interface ToolCall {
+  id: string;
+  name: string;
+  arguments: Record<string, unknown> | string;   // string = raw JSON from the provider
+}
+
+interface ToolResult {
+  toolCallId: string;
+  name: string;
+  result: unknown;
+  isError?: boolean;
+}
+
+interface Message {
+  role: Role;
+  content: string;
+  name?: string;
+  toolCalls?: ToolCall[];        // on assistant messages that request tools
+  toolResult?: ToolResult;       // on tool messages
+  metadata?: Record<string, unknown>;
+}
+
+interface TokenUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+```
+
+In `result.messages`, a `tool` message's `content` is the result as a string (raw if the tool returned a string, otherwise `JSON.stringify`). For error results, it's the JSON of the whole `ToolResult`. The structured value is always in `toolResult.result`.
+
+<SourceList paths={["src/types.ts"]} />

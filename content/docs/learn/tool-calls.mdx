@@ -1,0 +1,63 @@
+---
+title: How tool calls work
+description: Requested by the model, executed by the runtime, returned as messages.
+---
+
+A tool call has three parties. The **model** decides to call a tool and with which arguments. The **runtime** (SAGU) checks the request and runs your function. **Your function** does the actual work. The model never executes code. It only emits a structured request.
+
+## The lifecycle of one call
+
+When a model response contains `toolCalls`, the runner first appends an `assistant` message holding those calls. Then, **for each call in order**:
+
+| # | Step | If it fails |
+|---|---|---|
+| 1 | **Parse arguments.** If `arguments` is a string, `JSON.parse` it. | Error result: `Invalid JSON arguments for tool '…'` |
+| 2 | **Handoff?** If the name starts with `transfer_to_` and matches a handoff target, switch agents ([Handoffs](/docs/features/handoffs)). | `HandoffError` if `maxHandoffs` is exceeded (ends the run) |
+| 3 | Yield **`tool_start`** with the parsed arguments. | |
+| 4 | **Find the tool** by name on the active agent. | Error result: `Tool '…' is not registered on agent '…'` |
+| 5 | **Tool guardrails**, in order (span `tool_guardrail`). | Error result: `Tool guardrail blocked: …` and a `guardrail_triggered` event |
+| 6 | **Approval** if `requiresApproval`: `await onApprovalRequired(toolCall)`. | Error result: `Approval denied for tool execution '…'` |
+| 7 | **Validate** arguments with the tool's Zod schema (`safeParse`). | Error result: `Schema validation failed for tool '…': …` |
+| 8 | **Execute** with `(validatedInput, { agentName, runId, abortSignal })`, raced against `timeoutMs` if set (span `tool_execution`). | Error result: `Tool execution failed: …` |
+| 9 | Append a `tool` message with the result, and yield **`tool_end`**. | |
+
+Every "error result" is appended as a `tool` message with `toolResult.isError: true` and announced with `tool_end` (`isError: true`). The run **continues**, and the model sees the error text on its next turn and can retry or explain. Only a handoff-limit violation ends the run from inside tool handling.
+
+After all calls are handled, the runner starts the next turn so the model can read the results.
+
+## What the model sees
+
+Tool specs are sent as JSON Schema generated from your Zod schema by `zodToJsonSchema()`:
+
+```ts
+defineTool({
+  name: "get_weather",
+  description: "Get the current weather forecast for a specified city.",
+  input: z.object({
+    city: z.string().describe("Target city name"),
+    unit: z.enum(["celsius", "fahrenheit"]).default("celsius"),
+  }),
+  execute: async ({ city, unit }) => ({ city, unit, temperature: 21 }),
+});
+```
+
+The `description` fields matter: they are the only documentation the model gets about when and how to use the tool.
+
+## What you see
+
+In messages:
+
+```ts
+{ role: "assistant", content: "", toolCalls: [{ id: "call_calc_1", name: "calculate", arguments: { expression: "125 * 8" } }] }
+{ role: "tool", content: "{\"expression\":\"125 * 8\",\"result\":1000}", toolResult: { toolCallId: "call_calc_1", name: "calculate", result: { expression: "125 * 8", result: 1000 }, isError: false } }
+```
+
+In events, from `agent.stream()`: `tool_start` → `tool_end`. In the trace: a `tool_execution` span with `toolName`.
+
+## Ordering notes
+
+- Tool calls in one response run **sequentially**, not in parallel.
+- Tool guardrails receive the **raw** `toolCall`, before Zod validation and defaults. Write guardrails defensively.
+- Approval happens **before** validation, so a human may be asked to approve arguments that then fail the schema.
+
+Next: [Reading a run result](/docs/learn/run-results)

@@ -1,0 +1,64 @@
+---
+title: Provider adapters and fallback
+description: Swap model vendors with one line, and chain them for failover.
+---
+
+## What it does
+
+An agent's `model` is any `ModelProvider`. SAGU ships five:
+
+| Factory | Class | Talks to |
+|---|---|---|
+| `mock(turns)` | `MockProvider` | Nothing: replays scripted turns |
+| `anthropic(opts?)` | `AnthropicProvider` | Anthropic Messages API |
+| `openai(opts?)` | `OpenAIProvider` | OpenAI Chat Completions API |
+| `gemini(opts?)` | `GeminiProvider` | Google Gemini `generateContent` |
+| `fallback(primary, ...rest)` | `FallbackProvider` | Tries each provider in order |
+
+## What problem it solves
+
+Your agent logic (tools, guardrails, handoffs) shouldn't change when you switch vendors or when one has an outage. Tests shouldn't need network access.
+
+## Example
+
+```ts
+import { Agent, FallbackProvider, anthropic, openai, gemini, fallback } from "../src/index.ts";
+
+// Simple chain
+const agent = new Agent({
+  name: "HighAvailability",
+  instructions: "Assist the user.",
+  model: fallback(anthropic(), openai(), gemini()),
+});
+
+// With a callback when switching (use the class to pass options)
+const observed = new FallbackProvider([anthropic(), openai()], {
+  onFallback: (failed, next, err) => console.warn(`${failed} failed, trying ${next}`, err),
+});
+```
+
+Agents in one handoff graph can use different providers, for example a cheap router and a stronger specialist.
+
+<ProviderDiagram />
+
+## How fallback works
+
+- `generate()` / `stream()` try providers in order and return the first success.
+- **Any** error moves to the next provider, not only transient ones (a 400 bad request does too).
+- When all fail, it throws `ProviderError("All fallback providers exhausted (N attempted). Errors: [p1]: …; [p2]: …")` with `details.errors`.
+- `name` is `fallback(anthropic:… -> openai:…)`.
+
+## Limitations
+
+- **No token-level streaming** from the real adapters. See [Streaming](/docs/features/streaming#limitations).
+- **No automatic retry** before falling back. See [Reliability](/docs/features/reliability#automatic-retries-in-the-runner).
+- **`maxTokens` is never set by the runner.** Anthropic therefore always gets `max_tokens: 2048`; OpenAI and Gemini get no limit, so vendor defaults apply.
+- **Default model IDs are dated.** Always pass `model`.
+- **Not verified against live APIs**; tested with stubbed `fetch`.
+- **Stream fallback after partial output.** If a provider fails *after* yielding chunks, the next provider's chunks are appended. The built-in adapters fail before yielding, so this only affects custom streaming providers.
+
+Per-vendor setup: [Provider guides](/docs/providers).
+
+## Related source
+
+<SourceList paths={["src/providers/anthropic.ts", "src/providers/openai.ts", "src/providers/gemini.ts", "src/providers/fallback.ts", "src/providers/mock.ts", "test/providers.test.ts"]} />

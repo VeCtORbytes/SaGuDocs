@@ -1,0 +1,117 @@
+---
+title: Graph memory stores
+description: InMemoryGraphMemoryStore and Neo4jGraphMemoryStore, with setup and data model.
+---
+
+Both stores implement:
+
+```ts
+interface GraphMemoryStore {
+  remember(entry: { subject: string; predicate: string; object: string; metadata?: Record<string, unknown> }): Promise<void>;
+  recall(query: { about: string; limit?: number }): Promise<GraphMemoryEntry[]>;
+  close(): Promise<void>;
+}
+```
+
+Agents use them through `createGraphMemoryTools(store)`, and your own code can call `remember` and `recall` directly, for example to seed facts.
+
+<Callout type="warn">
+  Facts are written only when the model calls `remember_fact` or your code calls `store.remember()`. There is no
+  automatic extraction from conversations and no background maintenance (merging, pruning, confidence scoring).
+</Callout>
+
+## InMemoryGraphMemoryStore
+
+```ts
+import { InMemoryGraphMemoryStore } from "../src/index.ts";
+
+const store = new InMemoryGraphMemoryStore();
+await store.remember({ subject: "User", predicate: "PREFERS_LANGUAGE", object: "TypeScript" });
+await store.recall({ about: "language" }); // matches by word
+store.allEntries;                          // copy of every triplet
+```
+
+- **Lifetime:** process memory only. **Facts do not survive a restart.**
+- **Dedupe:** an exact case-insensitive match on all three parts replaces the existing entry, updating its metadata.
+- **Recall:** case-insensitive; matches if the full `about` text is in `"subject predicate object"`, or **any word** of `about` is in any part. Returns at most `limit` (default 10) in insertion order. An empty `about` returns the first `limit` entries.
+
+## Neo4jGraphMemoryStore
+
+### 1. Run Neo4j
+
+For local development, Neo4j's official Docker image works:
+
+```bash
+docker run --rm -p 7474:7474 -p 7687:7687 -e NEO4J_AUTH=neo4j/your-password neo4j:5
+```
+
+### 2. Install the driver
+
+```bash
+npm install neo4j-driver   # optional dependency of SAGU
+```
+
+### 3. Configure
+
+```bash
+export NEO4J_URI="bolt://localhost:7687"
+export NEO4J_USER="neo4j"
+export NEO4J_PASSWORD="your-password"
+```
+
+```ts
+import { Neo4jGraphMemoryStore, createAutoGraphMemoryStore, createGraphMemoryTools } from "../src/index.ts";
+
+// Explicit
+const store = new Neo4jGraphMemoryStore({ uri: process.env.NEO4J_URI!, database: "neo4j" });
+
+// Or: Neo4j if NEO4J_URI is set, otherwise in-memory
+const auto = await createAutoGraphMemoryStore();
+
+const tools = createGraphMemoryTools(store);
+// …
+await store.close();
+```
+
+<TypeTable
+  type={{
+    uri: { type: 'string', description: 'Bolt/Neo4j URI.', required: true },
+    database: { type: 'string', description: 'Database name passed to driver.session().' },
+    username: { type: 'string', description: 'Accepted but currently ignored. Set NEO4J_USER.' },
+    password: { type: 'string', description: 'Accepted but currently ignored. Set NEO4J_PASSWORD.' },
+    driver: { type: 'any', description: 'Inject an existing or mock neo4j driver (used in tests).' },
+  }}
+/>
+
+The driver is created lazily on the first `remember` or `recall`, with basic auth if `NEO4J_USER` or `NEO4J_PASSWORD` is set.
+
+### Data model
+
+```cypher
+// remember()
+MERGE (s:Entity { name: $subject })
+MERGE (o:Entity { name: $object })
+MERGE (s)-[r:RELATION { type: $predicate }]->(o)
+SET r.updatedAt = timestamp()
+
+// recall()
+MATCH (s:Entity)-[r:RELATION]->(o:Entity)
+WHERE toLower(s.name) CONTAINS toLower($about)
+   OR toLower(o.name) CONTAINS toLower($about)
+   OR toLower(r.type) CONTAINS toLower($about)
+RETURN s.name AS subject, r.type AS predicate, o.name AS object
+LIMIT $limit
+```
+
+- Every node is an `:Entity` with a `name`; every edge is a `:RELATION` with a `type` property, not a native relationship type.
+- `MERGE` prevents exact duplicate nodes and edges. Names are **case-sensitive** here, unlike the in-memory store.
+- `metadata` is not persisted.
+- Recall uses the **whole** `about` string as one substring.
+
+Inspect the graph in Neo4j Browser (`http://localhost:7474`):
+
+```cypher
+MATCH (s:Entity)-[r:RELATION]->(o:Entity) RETURN s, r, o LIMIT 50
+```
+
+<SourceList paths={["src/memory/graphMemory.ts", "src/memory/neo4jGraphMemory.ts", "src/memory/graphMemoryTools.ts", "test/memory.test.ts"]} />

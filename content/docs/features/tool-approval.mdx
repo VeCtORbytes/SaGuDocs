@@ -1,0 +1,70 @@
+---
+title: Human-in-the-loop tool approval
+description: Require an explicit yes before a risky tool executes.
+---
+
+## What it does
+
+Mark a tool with `requiresApproval: true`. Before executing it, the runner awaits `onApprovalRequired(toolCall)` from the run options. `true` lets it run. Anything else, or no handler at all, **denies** it.
+
+## What problem it solves
+
+Some actions are irreversible or costly: refunds, deletions, deployments, emails. Approval keeps a human, or your own policy code, in control of those specific calls, without blocking safe tools.
+
+## Example
+
+```ts
+import { createInterface } from "node:readline/promises";
+import { z } from "zod";
+import { Agent, defineTool, anthropic } from "../src/index.ts";
+
+const rebootServer = defineTool({
+  name: "reboot_server",
+  description: "Reboot a server by ID.",
+  input: z.object({ serverId: z.string() }),
+  requiresApproval: true,
+  execute: async ({ serverId }) => ({ serverId, status: "REBOOTED" }),
+});
+
+const agent = new Agent({
+  name: "Ops",
+  instructions: "You manage servers.",
+  model: anthropic(),
+  tools: [rebootServer],
+});
+
+const rl = createInterface({ input: process.stdin, output: process.stdout });
+
+const result = await agent.run("Reboot prod-1", {
+  onApprovalRequired: async (toolCall) => {
+    const answer = await rl.question(`Allow ${toolCall.name} ${JSON.stringify(toolCall.arguments)}? (y/N) `);
+    return answer.trim().toLowerCase() === "y";
+  },
+});
+rl.close();
+```
+
+## How it works internally
+
+In the per-tool-call pipeline, approval comes **after tool guardrails and before Zod validation**:
+
+1. If `tool.requiresApproval`, `approved = await options.onApprovalRequired?.(toolCall) ?? false`.
+2. If not approved, the model receives the error result `Approval denied for tool execution '<name>'`, and a `tool_end` event with `isError: true` is emitted. The run **continues**: the model can explain, or try something else.
+
+## Configuration
+
+| Field | Where | Default |
+|---|---|---|
+| `requiresApproval` | `defineTool({...})` | `false` |
+| `onApprovalRequired` | `agent.run(input, { … })` / `agent.stream(input, { … })` | none, so denied |
+
+## Limitations and common mistakes
+
+- **No handler means always denied.** That's a safe default, but easy to forget in tests.
+- **No pause/resume.** Approval happens inside a live run, and the run waits on your promise. To approve asynchronously (for example in a web UI), keep the promise pending until the user responds, and consider `timeoutMs` and `signal`.
+- **Not traced as its own span**, and there is no dedicated "approval requested" event. Denials are visible as `tool_end` errors.
+- **Arguments are not validated yet** when you're asked to approve them.
+
+## Related source
+
+<SourceList paths={["src/runner.ts", "src/tool.ts", "test/guardrails.test.ts", "test/tool.test.ts"]} />

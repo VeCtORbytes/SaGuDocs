@@ -1,0 +1,92 @@
+---
+title: Guardrails
+description: Block or rewrite user input, model output and tool calls.
+---
+
+## What it does
+
+Guardrails are plain functions that inspect a value and return `{ pass, reason?, modified? }`. SAGU runs them at three stages:
+
+| Stage | Config field | Receives | Block effect |
+|---|---|---|---|
+| Input | `inputGuardrails` | user input string | Run fails with `GuardrailError` (stage `input`) |
+| Tool | `toolGuardrails` | the raw `ToolCall` | That tool call returns an error result; the run continues |
+| Output | `outputGuardrails` | final answer text | Run fails with `GuardrailError` (stage `output`) |
+
+Returning `modified` (with `pass: true`) replaces the value. Use it to redact instead of reject.
+
+## What problem it solves
+
+Prompt-injection attempts, leaking secrets in answers, and calls to tools that shouldn't run in a given context. Guardrails put these policies in one place, and they appear in events and traces.
+
+## Example
+
+```ts
+import {
+  Agent,
+  anthropic,
+  createLengthGuardrail,
+  createRegexInputGuardrail,
+  createRegexOutputGuardrail,
+  createToolAllowlistGuardrail,
+  createToolParameterGuardrail,
+  type InputGuardrail,
+} from "../src/index.ts";
+
+// A custom guardrail is just a function.
+const noEmptyInput: InputGuardrail = (input) =>
+  input.trim() ? { pass: true } : { pass: false, reason: "Empty input" };
+
+// restartService and readLogs are tools you defined with defineTool().
+const agent = new Agent({
+  name: "SecureOps",
+  instructions: "You are an operations assistant.",
+  model: anthropic(),
+  tools: [restartService, readLogs],
+  inputGuardrails: [
+    noEmptyInput,
+    createLengthGuardrail({ maxLength: 4_000 }),
+    createRegexInputGuardrail({ pattern: /ignore previous instructions/i, reason: "Prompt injection attempt" }),
+  ],
+  toolGuardrails: [
+    createToolAllowlistGuardrail(["restart_service", "read_logs"]),
+    createToolParameterGuardrail(
+      "restart_service",
+      (args) => typeof args === "object" && args.env !== "production",
+      "Production restarts are not allowed from chat",
+    ),
+  ],
+  outputGuardrails: [
+    // Rewrite instead of block: pass replaceWith.
+    createRegexOutputGuardrail({ pattern: /sk-[a-zA-Z0-9_-]{20,}/g, replaceWith: "[redacted]" }),
+  ],
+});
+```
+
+## Built-in helpers
+
+| Helper | Returns | Behaviour |
+|---|---|---|
+| `createRegexInputGuardrail({ pattern, reason?, replaceWith? })` | `InputGuardrail` | Blocks on match, or replaces matches if `replaceWith` is given |
+| `createRegexOutputGuardrail({ pattern, reason?, replaceWith? })` | `OutputGuardrail` | Same, for output |
+| `createLengthGuardrail({ minLength?, maxLength? })` | `(text) => GuardrailResult` | Blocks outside the bounds; usable for input or output |
+| `createToolAllowlistGuardrail(names)` | `ToolGuardrail` | Blocks tools not in the list |
+| `createToolParameterGuardrail(toolName, validator, reason?)` | `ToolGuardrail` | Runs `validator(args)` for that tool only; blocks when it returns `false` |
+
+## How it works internally
+
+- Guardrails run **sequentially**, and each sees the output of the previous one's `modified`. The first block stops the chain.
+- Every guardrail gets a span (`input_guardrail`, `tool_guardrail`, `output_guardrail`) and, when it blocks or modifies, a `guardrail_triggered` event with `stage`, `reason` and `action: "blocked" | "modified"` (plus `toolName` for tool guardrails).
+- Context passed to guardrails is `{ agentName, runId }`.
+
+## Limitations and common mistakes
+
+- **Regex with the `g` flag and `.test()`.** The helpers call `pattern.test()` before `replace()`. A global regex keeps `lastIndex` between calls, so reusing a `/…/g` pattern can skip matches. Prefer non-global patterns for blocking. With `replaceWith`, the `g` flag is needed to replace every match.
+- **Output guardrails and `outputSchema`.** Output guardrails see the raw text, and `modified` text does **not** change the already-parsed structured `output`. Validate structured data in your schema (for example `.refine()`) instead.
+- **Tool guardrails see unvalidated arguments**, so `args` may be a string or contain unexpected types.
+- **Input guardrails run only for the starting agent**, not for handoff targets.
+- **The `stage` option of `createLengthGuardrail` is unused.** The stage is determined by which array you put it in.
+
+## Related source
+
+<SourceList paths={["src/guardrails.ts", "src/runner.ts", "test/guardrails.test.ts"]} />

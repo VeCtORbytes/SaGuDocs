@@ -1,0 +1,112 @@
+---
+title: Configure a real model provider
+description: Replace the mock model with Anthropic, OpenAI or Gemini using your own API key.
+---
+
+SAGU does not include model access. You create an account and API key with a model vendor, and SAGU sends requests to that vendor on your behalf with `fetch`.
+
+## 1. Get an API key
+
+| Provider | Where keys come from | Environment variable SAGU reads |
+|---|---|---|
+| Anthropic | Anthropic Console | `ANTHROPIC_API_KEY` |
+| OpenAI | OpenAI Platform dashboard | `OPENAI_API_KEY` |
+| Google Gemini | Google AI Studio | `GEMINI_API_KEY`, falling back to `GOOGLE_API_KEY` |
+
+## 2. Export it in your shell
+
+```bash
+export ANTHROPIC_API_KEY="your-key-here"
+```
+
+See [Environment variables](/docs/getting-started/environment-variables) for safer options than typing keys into your shell history.
+
+## 3. Swap the model
+
+Change only the `model` field of your agent. Tools, instructions and everything else stay the same.
+
+<Tabs items={["Anthropic", "OpenAI", "Gemini"]}>
+<Tab value="Anthropic">
+
+```ts
+import { Agent, anthropic } from "../src/index.ts";
+
+const agent = new Agent({
+  name: "Clock",
+  instructions: "Answer time questions using the get_time tool.",
+  // ANTHROPIC_MODEL is your own variable; SAGU only reads ANTHROPIC_API_KEY.
+  model: anthropic({ model: process.env.ANTHROPIC_MODEL }),
+  tools: [getTime],
+});
+```
+
+</Tab>
+<Tab value="OpenAI">
+
+```ts
+import { Agent, openai } from "../src/index.ts";
+
+const agent = new Agent({
+  name: "Clock",
+  instructions: "Answer time questions using the get_time tool.",
+  // OPENAI_MODEL is your own variable; SAGU only reads OPENAI_API_KEY.
+  model: openai({ model: process.env.OPENAI_MODEL }),
+  tools: [getTime],
+});
+```
+
+</Tab>
+<Tab value="Gemini">
+
+```ts
+import { Agent, gemini } from "../src/index.ts";
+
+const agent = new Agent({
+  name: "Clock",
+  instructions: "Answer time questions using the get_time tool.",
+  // GEMINI_MODEL is your own variable; SAGU only reads GEMINI_API_KEY / GOOGLE_API_KEY.
+  model: gemini({ model: process.env.GEMINI_MODEL }),
+  tools: [getTime],
+});
+```
+
+</Tab>
+</Tabs>
+
+## Pick a model ID explicitly
+
+If you omit `model`, each adapter falls back to a hard-coded default from when the adapter was written:
+
+| Adapter | Default `model` in source |
+|---|---|
+| `anthropic()` | `claude-3-5-sonnet-20241022` |
+| `openai()` | `gpt-4o` |
+| `gemini()` | `gemini-1.5-pro` |
+
+<Callout type="warn">
+  Vendors retire model IDs over time, and some of these defaults may no longer be served. Pass a model ID that is
+  currently available on your account. Check the vendor's model list.
+</Callout>
+
+## What a missing key looks like
+
+If the key is missing, the adapter throws a `ConfigurationError` when the runner first calls it. Because that happens inside the run, `agent.run()` **returns** it instead of throwing:
+
+```ts
+const result = await agent.run("hi");
+if (!result.success) {
+  console.log(result.error.code); // "SAGU_CONFIG_ERROR"
+  console.log(result.error.message);
+  // "Anthropic API key is missing. Set ANTHROPIC_API_KEY environment variable or pass { apiKey } in options."
+}
+```
+
+## Verification status
+
+<Callout type="info" title="What has been tested">
+  The adapters are covered by unit tests in `test/providers.test.ts` that use a stubbed `fetch`. These docs have not
+  been checked against live vendor APIs. If you hit a request-format error from a vendor, please open an issue with
+  the error body.
+</Callout>
+
+More detail per vendor: [Provider guides](/docs/providers).

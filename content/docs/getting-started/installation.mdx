@@ -1,0 +1,82 @@
+---
+title: Installation
+description: Clone the repository and install dependencies. Why there is no npm install yet.
+---
+
+## Current distribution status
+
+<Callout type="warn" title="npm install sagu-sdk does not work yet">
+  The package is named `sagu-sdk` in `package.json`, but it is **not published** to the npm registry (the registry
+  returns 404). Also, `npm run build` runs `tsc` with `noEmit: true`, so no `dist/` folder is produced, even though
+  `main` and `types` point at `dist/`. Until both are fixed, run SAGU from a clone of the repository.
+</Callout>
+
+## Clone and install
+
+<Steps>
+<Step>
+
+### Clone the repository
+
+```bash
+git clone https://github.com/VeCtORbytes/SaGuSDK.git
+cd SaGuSDK
+```
+
+</Step>
+<Step>
+
+### Install dependencies
+
+```bash
+npm install
+```
+
+This installs `zod` (runtime), `typescript` and `@types/node` (dev), and tries to install `neo4j-driver` as an **optional** dependency. If the Neo4j driver fails to install, everything except `Neo4jGraphMemoryStore` still works.
+
+</Step>
+<Step>
+
+### Verify the setup
+
+```bash
+npm test          # 73 tests via node --test, no network or API keys
+npm run typecheck # tsc --noEmit over src, test and examples
+```
+
+</Step>
+</Steps>
+
+## Where to put your own code
+
+Because SAGU is not an installable package yet, you import it by **relative path** to `src/index.ts`. The simplest layout is a folder inside the clone:
+
+```text
+SaGuSDK/
+├── src/            ← the SDK
+├── examples/
+└── playground/     ← your files
+    └── hello.ts    → import { Agent } from "../src/index.ts";
+```
+
+<Callout title="Import path used in these docs">
+  Every snippet in this documentation imports from `"../src/index.ts"`, assuming your file sits one folder below the
+  repository root (like `playground/hello.ts`). The repository's `package.json` sets `"type": "module"`, so these
+  files run as ES modules and top-level `await` works.
+</Callout>
+
+Run any file with plain Node.js:
+
+```bash
+node playground/hello.ts
+```
+
+## Optional: Neo4j driver
+
+`neo4j-driver` is listed under `optionalDependencies` and loaded with a dynamic `import()` only when a `Neo4jGraphMemoryStore` first connects. If it is missing, that store fails with a `MemoryError` that says to install it:
+
+```bash
+npm install neo4j-driver
+```
+
+Next: [Quickstart](/docs/getting-started/quickstart).

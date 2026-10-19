@@ -1,0 +1,22 @@
+---
+title: API reference
+description: Every public export of src/index.ts, grouped by area.
+---
+
+Everything below is exported from <Source path="src/index.ts" />. Signatures are copied from the source. Import from the entry file:
+
+```ts
+import { Agent, defineTool, mock } from "../src/index.ts";
+```
+
+| Area | Values | Types | Page |
+|---|---|---|---|
+| Agent & runner | `Agent`, `runAgent`, `streamAgent` | `AgentConfig`, `RunOptions`, `RunResult`, `RunContext` | [Agent](/docs/reference/agent) |
+| Tools & handoffs | `defineTool`, `createHandoffTool`, `formatHandoffToolName`, `isHandoffToolName`, `extractTargetAgentName`, `getAgentHandoffTools`, `buildCombinedToolSpecs`, `HANDOFF_TOOL_PREFIX`, `HandoffInputSchema` | `DefineToolOptions`, `Tool`, `ToolContext`, `HandoffTool`, `HandoffInput` | [Tools & handoffs](/docs/reference/tools) |
+| Providers | `MockProvider`, `mock`, `AnthropicProvider`, `anthropic`, `OpenAIProvider`, `openai`, `GeminiProvider`, `gemini`, `FallbackProvider`, `fallbackProvider`, `fallback`, `zodToJsonSchema` | `ModelProvider`, `ProviderRequest`, `ProviderResponse`, `ProviderMessage`, `ProviderStreamChunk`, `ToolSpec`, `MockTurn`, `MockTurnHandler`, `MockProviderOptions`, `AnthropicProviderOptions`, `OpenAIProviderOptions`, `GeminiProviderOptions`, `FallbackOptions` | [Providers](/docs/reference/providers) |
+| Memory | `InMemorySession`, `FileSession`, `SqliteSession`, `InMemoryGraphMemoryStore`, `Neo4jGraphMemoryStore`, `createAutoGraphMemoryStore`, `createGraphMemoryTools` | `SessionStore`, `GraphMemoryStore`, `GraphMemoryEntry`, `GraphMemoryQuery`, `InMemorySessionOptions`, `FileSessionOptions`, `SqliteSessionOptions`, `Neo4jGraphMemoryOptions` | [Memory](/docs/reference/memory) |
+| Guardrails & structured output | `createRegexInputGuardrail`, `createRegexOutputGuardrail`, `createLengthGuardrail`, `createToolAllowlistGuardrail`, `createToolParameterGuardrail`, `extractJsonFromText`, `formatZodIssues`, `buildSchemaRepairPrompt`, `parseStructuredOutput` | `InputGuardrail`, `OutputGuardrail`, `ToolGuardrail`, `GuardrailResult`, `GuardrailContext` | [Guardrails & output](/docs/reference/guardrails-and-output) |
+| Events & tracing | `isTextDelta`, `isToolStart`, `isToolEnd`, `isHandoff`, `isGuardrailTriggered`, `isRunCompleted`, `isRunFailed`, `TraceRecorder`, `ConsoleExporter`, `JSONFileExporter` | `AgentEvent`, `Trace`, `TraceSpan`, `TraceExporter`, `JSONFileExporterOptions` | [Events & tracing](/docs/reference/events-and-tracing) |
+| Reliability | `withRetry`, `withTimeout`, `redactSecrets`, `isTransientError` | `RetryOptions` | [Reliability](/docs/reference/reliability) |
+| Errors | `SaguError`, `ConfigurationError`, `ProviderError`, `GuardrailError`, `ToolExecutionError`, `StructuredOutputError`, `HandoffError`, `TimeoutError`, `MaxTurnsExceededError`, `MemoryError` | `SaguErrorCode`, `GuardrailStage` | [Errors](/docs/reference/errors) |
+| Core types | | `Role`, `Message`, `ToolCall`, `ToolResult`, `TokenUsage` | [Types](/docs/reference/types) |

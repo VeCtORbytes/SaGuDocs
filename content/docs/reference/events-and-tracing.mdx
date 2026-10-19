@@ -1,0 +1,71 @@
+---
+title: Events and tracing
+description: AgentEvent, type guards, TraceRecorder and exporters.
+---
+
+## `AgentEvent<TOutput>`
+
+```ts
+type AgentEvent<TOutput = any> =
+  | { type: "text_delta"; text: string }
+  | { type: "tool_start"; toolCallId: string; name: string; arguments: Record<string, unknown> | string }
+  | { type: "tool_end"; toolCallId: string; name: string; result: unknown; isError: boolean }
+  | { type: "handoff"; fromAgent: string; toAgent: string; reason?: string }
+  | { type: "guardrail_triggered"; stage: "input" | "output" | "tool"; reason: string; action: "blocked" | "modified"; toolName?: string }
+  | { type: "run_completed"; output: TOutput; messages: Message[]; usage: TokenUsage; agentName: string; turns: number; trace?: Trace }
+  | { type: "run_failed"; error: SaguError; messages: Message[]; usage: TokenUsage; agentName: string; turns: number; trace?: Trace };
+```
+
+Type guards, each `(event: AgentEvent) => event is …`: `isTextDelta`, `isToolStart`, `isToolEnd`, `isHandoff`, `isGuardrailTriggered`, `isRunCompleted<T>`, `isRunFailed`.
+
+## Trace types
+
+```ts
+interface TraceSpan {
+  id: string;
+  parentId?: string;
+  name: string;
+  startTime: number;          // ms since epoch
+  endTime?: number;
+  attributes: Record<string, unknown>;
+  error?: Record<string, unknown>;
+}
+
+interface Trace { runId: string; spans: TraceSpan[]; usage: TokenUsage; startTime: number; endTime?: number; }
+
+interface TraceExporter { export(trace: Trace): Promise<void> | void; }
+```
+
+## `TraceRecorder`
+
+```ts
+class TraceRecorder {
+  constructor(runId?: string);                       // random UUID if omitted
+  readonly runId: string;
+  readonly startTime: number;
+  startSpan(name: string, attributes?: Record<string, unknown>, parentId?: string): string;
+  endSpan(spanId: string, attributes?: Record<string, unknown>, error?: unknown): void;
+  recordUsage(usage?: Partial<TokenUsage>): void;
+  finish(): void;                                    // sets endTime, closes open spans
+  getTrace(): Trace;                                 // passed through redactSecrets()
+}
+```
+
+Used internally by the runner; exported so you can trace your own code in the same format.
+
+## Exporters
+
+```ts
+class ConsoleExporter implements TraceExporter { export(trace: Trace): void; }
+
+class JSONFileExporter implements TraceExporter {
+  constructor(options?: JSONFileExporterOptions);
+  readonly outputDir: string;   // default "./traces"
+  readonly filePath?: string;
+  export(trace: Trace): Promise<void>;   // writes filePath, or <outputDir>/trace-<runId>.json
+}
+
+interface JSONFileExporterOptions { filePath?: string; outputDir?: string; }
+```
+
+<SourceList paths={["src/events.ts", "src/trace.ts"]} />

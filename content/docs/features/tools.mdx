@@ -1,0 +1,87 @@
+---
+title: Tools and argument validation
+description: Define typed, Zod-validated, async tools with defineTool().
+---
+
+## What it does
+
+`defineTool()` turns a name, description, Zod schema and function into a `Tool` the model can request. SAGU sends the schema to the model as JSON Schema, validates whatever the model sends back, and only then calls your function with typed input.
+
+## What problem it solves
+
+Models produce tool arguments as JSON, and they are sometimes wrong: missing fields, wrong types, extra text. Without validation, those errors reach your business logic. `defineTool()` gives you one schema that serves as the type, the runtime validator and the model-facing documentation.
+
+## When to use it
+
+Any time the model needs to *do* something or *look something up*: call an API, query a database, compute, or read a file.
+
+## Example
+
+```ts title="playground/tools.ts"
+import { z } from "zod";
+import { Agent, defineTool, mock } from "../src/index.ts";
+
+const getWeather = defineTool({
+  name: "get_weather",
+  description: "Get the current weather forecast for a specified city.",
+  input: z.object({
+    city: z.string().describe("Target city name"),
+    unit: z.enum(["celsius", "fahrenheit"]).default("celsius"),
+  }),
+  timeoutMs: 5_000,
+  execute: async ({ city, unit }, context) => {
+    // context: { agentName, runId, abortSignal }
+    const res = await fetch(`https://example.com/weather?city=${encodeURIComponent(city)}`, {
+      signal: context?.abortSignal,
+    });
+    return { city, unit, forecast: await res.json() };
+  },
+});
+
+const agent = new Agent({
+  name: "WeatherBot",
+  instructions: "Use get_weather for weather questions.",
+  model: mock([
+    { toolCalls: [{ id: "c1", name: "get_weather", arguments: { city: "Paris" } }] },
+    "Done.",
+  ]),
+  tools: [getWeather],
+});
+```
+
+`unit` is optional for the model because of `.default("celsius")`, and your `execute` receives the defaulted value.
+
+## Options
+
+<TypeTable
+  type={{
+    name: { type: 'string', description: 'Unique name. Letters, digits, underscore and hyphen only (/^[a-zA-Z0-9_-]+$/). Trimmed.', required: true },
+    description: { type: 'string', description: 'Tells the model what the tool does and when to call it.', required: true },
+    input: { type: 'z.ZodType<TInput>', description: 'Zod schema for arguments. Converted to JSON Schema for the model and used with safeParse before execute.', required: true },
+    execute: { type: '(input: TInput, context?: ToolContext) => TOutput | Promise<TOutput>', description: 'Your function. Receives validated input and { agentName, runId, abortSignal }.', required: true },
+    requiresApproval: { type: 'boolean', description: 'Require onApprovalRequired to return true before execution.', default: 'false' },
+    timeoutMs: { type: 'number', description: 'Reject with TimeoutError if execute takes longer. The model receives the error.', default: 'none' },
+  }}
+/>
+
+`defineTool` throws `ConfigurationError` immediately if any required field is missing or the name is invalid.
+
+## How it works internally
+
+- `defineTool` returns `{ name, description, inputSchema, execute, requiresApproval, timeoutMs, toJSONSchema }`. `toJSONSchema()` calls SAGU's own `zodToJsonSchema()` (<Source path="src/providers/schema.ts" />).
+- The runner validates with `inputSchema.safeParse(args)`. On failure, the model receives `Schema validation failed for tool '…': <zod message>`.
+- A thrown error or a timeout becomes `Tool execution failed: <message>`. Return values that aren't strings are `JSON.stringify`-ed into the `tool` message content.
+
+See [How tool calls work](/docs/learn/tool-calls) for the full ordering.
+
+## Limitations and common mistakes
+
+- **Zod 3 only.** `zodToJsonSchema()` reads Zod 3 internals (`_def.typeName`). Supported: string, number, boolean, object, array, enum, nativeEnum, optional, nullable, default, effects, union, discriminatedUnion, record, literal. Anything else is described to the model as `{ type: "string" }`, though validation still uses the real Zod schema.
+- **String formats are not sent.** Refinements like `.email()`, `.min()` and `.max()` are validated but not included in the JSON Schema.
+- **Timeouts don't cancel your work.** `timeoutMs` stops *waiting*. Pass `context.abortSignal` to `fetch` (and similar) if you need cancellation. Note that `abortSignal` is the run's `signal`, not a per-tool timeout signal.
+- **Tool calls run sequentially**, in the order the model listed them.
+- **Duplicate tool names** are not detected. The first tool with a matching name wins.
+
+## Related source
+
+<SourceList paths={["src/tool.ts", "src/providers/schema.ts", "src/runner.ts", "test/tool.test.ts", "examples/01-basic-tool-agent/index.ts"]} />

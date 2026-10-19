@@ -1,0 +1,66 @@
+---
+title: "03 · Structured output & SQLite memory"
+description: A typed extraction agent that recovers from invalid output, with history kept in SqliteSession.
+---
+
+<Source path="examples/03-structured-output-and-memory/index.ts" />
+
+```bash
+node examples/03-structured-output-and-memory/index.ts
+```
+
+## What it demonstrates
+
+1. `outputSchema` enforcement with automatic repair
+2. `Agent<LeadProfile>`, so `result.output` is typed
+3. `SqliteSession` (built-in `node:sqlite`) persisting history across two runs
+
+## Key code
+
+```ts
+const LeadProfileSchema = z.object({
+  fullName: z.string().describe("Candidate or contact full name"),
+  company: z.string().describe("Company or organization name"),
+  role: z.string().describe("Current role or job title"),
+  interests: z.array(z.string()).describe("List of tech interests or requirements"),
+  confidenceScore: z.number().min(0).max(1).describe("Confidence score between 0 and 1"),
+});
+type LeadProfile = z.infer<typeof LeadProfileSchema>;
+
+const leadExtractor = new Agent<LeadProfile>({
+  name: "LeadProfileExtractor",
+  instructions: "Extract structured lead profiles from customer transcripts or emails according to the JSON schema.",
+  model, // scripted: invalid → repaired → second-session answer
+  outputSchema: LeadProfileSchema,
+  maxRepairAttempts: 2,
+});
+
+const sessionStore = new SqliteSession({ filename: ":memory:" });
+const sessionId = "lead_session_user_808";
+
+const run1 = await leadExtractor.run("Hi, I'm Elena Rostova, VP of Engineering at Apex Cloud Systems. …", { sessionId, sessionStore });
+const run2 = await leadExtractor.run("Quick update: I was just promoted to Chief Technology Officer! …", { sessionId, sessionStore });
+sessionStore.close();
+```
+
+## Walkthrough
+
+**Run 1**
+- Turn 1: the mock returns JSON without `company` and with `confidenceScore: "0.95"` (a string). Validation fails.
+- The runner appends the invalid answer and a repair prompt:
+  ```text
+  Your previous response did not conform to the required JSON schema.
+  Validation errors:
+  - Field 'company': Required
+  - Field 'confidenceScore': Expected number, received string
+
+  Please correct the errors and respond with ONLY valid JSON.
+  ```
+- Turn 2: corrected JSON passes. `run1.turns === 2`.
+- On success, the run's messages (user, invalid assistant, repair prompt, valid assistant) are saved to SQLite.
+
+**Run 2**
+- History is loaded from SQLite first, so the model sees run 1. The response passes on the first try.
+- `run2.messages.length` is **6**: four from run 1, plus this run's user and assistant messages.
+
+The example uses `:memory:`, so the database disappears at the end. Use `filename: "./leads.db"` to keep it.

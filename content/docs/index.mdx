@@ -1,0 +1,48 @@
+---
+title: Introduction
+description: What SAGU is, what it is not, and where to start.
+---
+
+**SAGU** is an open-source TypeScript SDK for building AI agents: programs where a language model decides which of your functions ("tools") to call, the SDK runs them, and the model uses the results to answer. It is written from scratch, with no agent framework underneath, and its one required runtime dependency is [Zod](https://zod.dev).
+
+The core loop lives in a single file, <Source path="src/runner.ts" />, so you can read exactly what happens on every turn.
+
+<ArchitectureOverview />
+
+## What SAGU is
+
+- **A library you import into your own Node.js code.** You construct an `Agent`, call `agent.run()` or iterate `agent.stream()`, and get back a typed result.
+- **Provider-neutral.** Agents talk to a small `ModelProvider` interface. The repository ships adapters for Anthropic, OpenAI and Gemini, a scriptable `MockProvider` for tests, and a `FallbackProvider` that chains them.
+- **Predictable.** Expected runtime failures (a guardrail block, `maxTurns` reached, schema repair exhausted, a provider error) come back as `{ success: false, error }` instead of being thrown.
+
+## What SAGU is not
+
+- **Not a hosted model or API.** SAGU does not give you model access. You bring your own API key from Anthropic, OpenAI or Google.
+- **Not a chatbot UI.** There is no end-user interface; you build the surface (CLI, HTTP route, worker) yourself.
+- **Not on npm yet.** The package is named `sagu-sdk` in `package.json`, but it is not published and its build step does not currently emit JavaScript. Today you clone the repository and run TypeScript directly on Node.js. See [Installation](/docs/getting-started/installation).
+
+## Feature map
+
+<Cards>
+  <Card title="Tools" href="/docs/features/tools" description="Zod-validated, async, with timeouts." />
+  <Card title="Handoffs" href="/docs/features/handoffs" description="Transfer a run between agents, with a loop cap." />
+  <Card title="Guardrails" href="/docs/features/guardrails" description="Block or rewrite input, output and tool calls." />
+  <Card title="Tool approval" href="/docs/features/tool-approval" description="Human-in-the-loop for risky tools." />
+  <Card title="Structured output" href="/docs/features/structured-output" description="Typed results with automatic repair prompts." />
+  <Card title="Session memory" href="/docs/features/session-memory" description="In-memory, JSON file or node:sqlite history." />
+  <Card title="Graph memory" href="/docs/features/graph-memory" description="Triplet facts in memory or Neo4j, exposed as tools." />
+  <Card title="Streaming" href="/docs/features/streaming" description="Async-iterator event stream for every run." />
+  <Card title="Tracing" href="/docs/features/tracing" description="Span trees with secret redaction and exporters." />
+  <Card title="Error handling" href="/docs/features/error-handling" description="Typed SaguError hierarchy and the return-vs-throw rule." />
+  <Card title="Reliability" href="/docs/features/reliability" description="withRetry, withTimeout, redactSecrets." />
+  <Card title="Providers" href="/docs/features/providers" description="Adapters and fallback chains." />
+</Cards>
+
+## Where to start
+
+<Cards>
+  <Card title="Quickstart" href="/docs/getting-started/quickstart" description="Run a tool-using agent in about five minutes, no API key needed." />
+  <Card title="How the agent loop works" href="/docs/learn/agent-loop" description="New to agent SDKs? Start with the fundamentals." />
+  <Card title="Examples" href="/docs/examples" description="Four runnable examples from the repository." />
+  <Card title="API reference" href="/docs/reference" description="Every public export from src/index.ts." />
+</Cards>

@@ -1,0 +1,99 @@
+---
+title: Retry, timeout and secret redaction
+description: withRetry, withTimeout, isTransientError and redactSecrets, and where the runner uses them.
+---
+
+## What it does
+
+Four exported utilities in <Source path="src/reliability.ts" />:
+
+| Function | Purpose |
+|---|---|
+| `withRetry(fn, options?)` | Re-run an async function on transient errors with exponential backoff and jitter |
+| `isTransientError(error)` | The default retry predicate |
+| `withTimeout(promise, ms, name, signal?)` | Reject with `TimeoutError` after `ms`, or on abort |
+| `redactSecrets(value, patterns?)` | Deep-replace secrets in strings, arrays and objects with `[REDACTED_SECRET]` |
+
+## Retry
+
+```ts
+import { withRetry } from "../src/index.ts";
+
+const data = await withRetry(() => fetchInventory(), {
+  maxRetries: 3,        // default 3
+  initialDelayMs: 200,  // default 200
+  maxDelayMs: 4000,     // default 4000
+  backoffFactor: 2,     // default 2
+  onRetry: (err, attempt, delayMs) => console.warn(`retry ${attempt} in ${delayMs}ms`),
+  // shouldRetry: (err, attempt) => boolean   (default: isTransientError)
+});
+```
+
+The delay is `min(maxDelay, initialDelay × factor^(attempt−1))`, multiplied by a random factor between 0.8 and 1.2.
+
+`isTransientError` returns `true` for:
+- a `ProviderError` with `isTransient`, or with status 429, 500, 502, 503 or 504
+- error `code` `ECONNRESET`, `ETIMEDOUT`, `EAI_AGAIN` or `ECONNREFUSED`
+- messages containing `rate limit`, `too many requests`, `fetch failed`, `network error` or `overloaded`
+
+### Automatic retries in the runner
+
+The runner wraps `model.generate()` in `withRetry({ maxRetries: 3, initialDelayMs: 200 })`, but **only when the provider has no `stream()` method**.
+
+<Callout type="warn" title="Built-in providers are not auto-retried">
+  `MockProvider`, `AnthropicProvider`, `OpenAIProvider`, `GeminiProvider` and `FallbackProvider` all implement
+  `stream()`, so the runner takes the streaming path, which has **no retry**. A transient 429 fails the run (or moves to
+  the next provider inside `fallback()`). To get retries today, wrap the provider:
+</Callout>
+
+```ts
+import { anthropic, withRetry, type ModelProvider } from "../src/index.ts";
+
+const base = anthropic();
+const retrying: ModelProvider = {
+  name: `retry(${base.name})`,
+  generate: (req) => withRetry(() => base.generate(req), { maxRetries: 3 }),
+  // no stream(): the runner also applies its own withRetry around generate()
+};
+```
+
+## Timeout
+
+```ts
+import { withTimeout, TimeoutError } from "../src/index.ts";
+
+try {
+  await withTimeout(slowCall(), 2_000, "inventory_lookup");
+} catch (e) {
+  if (e instanceof TimeoutError) console.log(e.operation, e.timeoutMs);
+}
+```
+
+The runner applies `withTimeout` to a tool's `execute()` when `timeoutMs` is set, passing the run's `signal`. There's no built-in timeout for model calls; pass `signal` (an `AbortSignal`) in `RunOptions` to cancel. The built-in adapters forward it to `fetch`.
+
+## Secret redaction
+
+```ts
+import { redactSecrets } from "../src/index.ts";
+
+redactSecrets({ apiKey: "abc", note: "token sk-abcdefghijklmnopqrstuvwxyz123" });
+// → { apiKey: "[REDACTED_SECRET]", note: "token [REDACTED_SECRET]" }
+```
+
+What it removes:
+
+- **Patterns** in strings: `sk-…` (20+ chars), `sk-ant-…`, `AIza…` (30+ chars), `Bearer <16+ chars>`. Passing `customPatterns` **replaces** these defaults.
+- **Values of sensitive environment variables** (8+ chars) found anywhere in a string.
+- **Whole values of sensitive object keys**: `token`, `*_token`, `token_*`, `*secret*`, `*password*`, `*apikey*`, `*api_key*`, `key`, `*_key`, `*authorization*`, `*auth_header*`. Keys containing `tokens` (like `totalTokens`) are excluded.
+
+The runner applies it to every trace (`TraceRecorder.getTrace()`). It is **not** applied to `result.messages`, events or tool results.
+
+## Limitations
+
+- Heuristic redaction misses formats it doesn't know. Treat it as defence in depth, not a guarantee.
+- `withTimeout` doesn't cancel the underlying work.
+- No retry for streaming providers, as described above.
+
+## Related source
+
+<SourceList paths={["src/reliability.ts", "src/runner.ts", "src/trace.ts", "test/reliability.test.ts"]} />

@@ -1,0 +1,71 @@
+---
+title: "02 · Support triage handoff"
+description: A triage agent routes a refund request to a billing specialist, observed through stream().
+---
+
+<Source path="examples/02-support-triage-handoff/index.ts" />
+
+```bash
+node examples/02-support-triage-handoff/index.ts
+```
+
+## What it demonstrates
+
+1. Specialist agents with domain tools (`BillingSpecialist` with `issue_refund`, `TechSpecialist` without tools)
+2. Routing via the synthetic `transfer_to_billingspecialist` tool
+3. History preserved across the agent boundary
+4. Consuming `agent.stream()` events
+
+<HandoffDiagram />
+
+## Key code
+
+```ts
+const triageAgent = new Agent({
+  name: "TriageAgent",
+  instructions:
+    "You are the front-desk support triage bot. Determine the customer's request topic and transfer to either BillingSpecialist or TechSpecialist.",
+  model: mock([
+    {
+      toolCalls: [{
+        id: "call_handoff_1",
+        name: "transfer_to_billingspecialist",
+        arguments: { reason: "Customer requested a refund for invoice INV-9921" },
+      }],
+    },
+  ]),
+  handoffs: [billingSpecialist, techSupportSpecialist],
+});
+
+for await (const event of triageAgent.stream("Hi, I was accidentally charged $79.99 on invoice INV-9921 …")) {
+  if (event.type === "handoff") console.log(`[HANDOFF] ${event.fromAgent} -> ${event.toAgent} (${event.reason})`);
+  else if (event.type === "tool_start") console.log(`[TOOL START] ${event.name}`, event.arguments);
+  else if (event.type === "tool_end") console.log(`[TOOL END] ${event.name}`, event.result);
+  else if (event.type === "run_completed") console.log(`[FINAL from ${event.agentName}]`, event.output);
+}
+```
+
+## Output
+
+```text
+🔀 [HANDOFF EVENT] Transferred from TriageAgent -> BillingSpecialist (Reason: Customer requested a refund for invoice INV-9921)
+⚙️  [TOOL START] Tool: issue_refund | Args: {"invoiceId":"INV-9921","amount":79.99,"reason":"Accidental renewal charge"}
+✔  [TOOL END] Tool: issue_refund | Result: {"status":"APPROVED","refundId":"ref_884920",…}
+
+🎉 [FINAL OUTPUT from BillingSpecialist]:
+I have processed your refund of $79.99 for invoice INV-9921. You will see the credit back on your account in 3-5 business days.
+Turns: 3 | Total Tokens: 103
+```
+
+## Walkthrough
+
+- **Turn 1** (`TriageAgent`): handoff tool call → `handoff` event → active agent becomes `BillingSpecialist`.
+- **Turn 2** (`BillingSpecialist`): `issue_refund` tool call.
+- **Turn 3** (`BillingSpecialist`): final text. `event.agentName` is `BillingSpecialist`.
+
+Each agent has its **own** mock with its own script, mirroring how each agent can have its own real provider.
+
+## Try changing
+
+- Set `maxHandoffs: 0` on `TriageAgent` and watch the run fail with `SAGU_HANDOFF_ERROR`.
+- Add `triageAgent` to `billingSpecialist.handoffs` (you'll need to restructure construction order) to allow handing back.

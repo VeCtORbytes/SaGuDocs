@@ -1,0 +1,65 @@
+---
+title: How model providers fit in
+description: The ModelProvider contract, and how adapters translate it to each vendor's API.
+---
+
+The runner never imports a vendor SDK. It talks to one interface, defined in <Source path="src/types.ts" />:
+
+```ts
+interface ModelProvider {
+  name: string;
+  generate(request: ProviderRequest): Promise<ProviderResponse>;
+  stream?(request: ProviderRequest): AsyncGenerator<ProviderStreamChunk, ProviderResponse, unknown>;
+}
+
+interface ProviderRequest {
+  messages: ProviderMessage[];       // role, content, toolCalls?, toolResult?
+  systemPrompt?: string;
+  tools?: ToolSpec[];                // { name, description, parameters: JSON Schema }
+  temperature?: number;
+  maxTokens?: number;
+  outputSchema?: Record<string, unknown>;
+  abortSignal?: AbortSignal;
+}
+
+interface ProviderResponse {
+  content?: string;
+  toolCalls?: ToolCall[];            // { id, name, arguments }
+  stopReason?: "end_turn" | "tool_use" | "max_tokens" | "stop" | string;
+  usage?: TokenUsage;
+}
+```
+
+<ProviderDiagram />
+
+## What an adapter does
+
+Each built-in adapter (<Source path="src/providers/anthropic.ts" />, <Source path="src/providers/openai.ts" />, <Source path="src/providers/gemini.ts" />):
+
+1. Reads the API key from options or the environment, and throws `ConfigurationError` if it is missing.
+2. Translates `messages` to the vendor's format. For example, Anthropic receives tool results as a `user` message with a `tool_result` block, and Gemini uses role `model` and `functionCall` parts.
+3. Translates `tools` to the vendor's tool definitions (`input_schema`, `function.parameters` or `functionDeclarations`).
+4. Calls `fetch` (or your injected `fetch`), and maps HTTP errors to `ProviderError` with `statusCode`. A 429 or 5xx status is marked `isTransient`.
+5. Maps the response back to `{ content, toolCalls, stopReason, usage }`.
+
+Only the OpenAI adapter forwards `outputSchema` to the vendor (as `response_format` with a JSON schema). For the other adapters, structured output relies on the schema text the runner adds to the system prompt, plus SAGU's own validation.
+
+## Writing your own provider
+
+Any object with a `name` and a `generate()` method works:
+
+```ts
+import type { ModelProvider } from "../src/index.ts";
+
+const echo: ModelProvider = {
+  name: "echo",
+  async generate(request) {
+    const last = request.messages.at(-1);
+    return { content: `You said: ${last?.content ?? ""}`, stopReason: "end_turn" };
+  },
+};
+```
+
+Omit `stream()` if you want the runner to apply its built-in `withRetry` around `generate()`. See [Reliability](/docs/features/reliability#automatic-retries-in-the-runner).
+
+Next: [How tool calls work](/docs/learn/tool-calls)

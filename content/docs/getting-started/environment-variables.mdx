@@ -1,0 +1,75 @@
+---
+title: Environment variables
+description: Every variable SAGU reads, and how to supply secrets safely.
+---
+
+## Variables read by SAGU
+
+These are all the `process.env` reads in `src/`:
+
+| Variable | Read by | Purpose |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | `AnthropicProvider` | API key when `apiKey` option is omitted |
+| `OPENAI_API_KEY` | `OpenAIProvider` | API key when `apiKey` option is omitted |
+| `GEMINI_API_KEY` | `GeminiProvider` | API key when `apiKey` option is omitted |
+| `GOOGLE_API_KEY` | `GeminiProvider` | Used if `GEMINI_API_KEY` is unset |
+| `NEO4J_URI` | `createAutoGraphMemoryStore()` | If set, returns a Neo4j store instead of in-memory |
+| `NEO4J_USER` | `Neo4jGraphMemoryStore`, `createAutoGraphMemoryStore()` | Neo4j username (default `neo4j`) |
+| `NEO4J_USERNAME` | `createAutoGraphMemoryStore()` only | Alternative username name, see note below |
+| `NEO4J_PASSWORD` | `Neo4jGraphMemoryStore`, `createAutoGraphMemoryStore()` | Neo4j password |
+
+<Callout type="warn" title="Neo4j credentials come from the environment">
+  `Neo4jGraphMemoryStore` accepts `username` and `password` options, but its driver is created from `NEO4J_USER` and
+  `NEO4J_PASSWORD` in `process.env`. The options are currently ignored, and `NEO4J_USERNAME` is not read at connect
+  time. Set `NEO4J_USER` and `NEO4J_PASSWORD`.
+</Callout>
+
+`redactSecrets()` also scans **all** environment variables. Any variable whose name looks sensitive (contains `secret`, `password`, `api_key`, `apikey`, `authorization`, ends in `_key` or `_token`, …) and whose value is at least 8 characters is replaced with `[REDACTED_SECRET]` wherever it appears in a trace.
+
+## Supplying secrets
+
+<Tabs items={["Node --env-file", "Shell export", "Pass explicitly"]}>
+<Tab value="Node --env-file">
+
+Node.js can load a dotenv-style file itself, without any extra dependency:
+
+```bash title=".env"
+ANTHROPIC_API_KEY=your-key-here
+```
+
+```bash
+node --env-file=.env playground/hello.ts
+```
+
+The repository's `.gitignore` already ignores `.env` and `.env.*`.
+
+</Tab>
+<Tab value="Shell export">
+
+```bash
+export OPENAI_API_KEY="your-key-here"
+node playground/hello.ts
+```
+
+This puts the key in shell history unless your shell is configured to skip it.
+
+</Tab>
+<Tab value="Pass explicitly">
+
+Every adapter accepts `apiKey`, which takes precedence over the environment. Load it from your own secret manager:
+
+```ts
+import { openai } from "../src/index.ts";
+
+const model = openai({ apiKey: await loadSecret("openai") }); // loadSecret is your code
+```
+
+</Tab>
+</Tabs>
+
+## Rules of thumb
+
+- **Never commit keys.** Keep them in `.env` (ignored) or a secret manager.
+- **Never ship keys to a browser.** SAGU is server-side code. Do not bundle it, or your keys, into client JavaScript.
+- **Gemini puts the key in the URL.** `GeminiProvider` calls `…:generateContent?key=YOUR_KEY`. Avoid logging request URLs from a custom `fetch`.
+- **Use `mock()` in CI.** Tests and examples need no keys.

@@ -1,0 +1,54 @@
+---
+title: OpenAI
+description: OpenAIProvider for the Chat Completions API.
+---
+
+## Credentials
+
+Create an API key in the OpenAI Platform dashboard. SAGU reads `OPENAI_API_KEY`, or the `apiKey` option, which takes precedence.
+
+```bash
+export OPENAI_API_KEY="your-key-here"
+```
+
+## Usage
+
+```ts
+import { Agent, openai } from "../src/index.ts";
+
+const agent = new Agent({
+  name: "Assistant",
+  instructions: "Be concise.",
+  model: openai({ model: "your-model-id" }),
+  temperature: 0.2,
+});
+```
+
+## Options
+
+<TypeTable
+  type={{
+    apiKey: { type: 'string', description: 'API key.', default: 'process.env.OPENAI_API_KEY' },
+    model: { type: 'string', description: 'Model ID sent in the request body.', default: '"gpt-4o"' },
+    baseURL: { type: 'string', description: 'API base. Trailing slash removed. Requests go to {baseURL}/chat/completions.', default: '"https://api.openai.com/v1"' },
+    organization: { type: 'string', description: 'Sent as the OpenAI-Organization header.' },
+    fetch: { type: 'typeof fetch', description: 'Custom fetch, for proxies or tests.', default: 'globalThis.fetch' },
+  }}
+/>
+
+## Request mapping
+
+- `systemPrompt` → a leading `system` message. Tool results → `role: "tool"` with `tool_call_id`.
+- `tools` → `[{ type: "function", function: { name, description, parameters } }]`.
+- `outputSchema` → `response_format: { type: "json_schema", json_schema: { name: "output", schema, strict: true } }`.
+- Auth: `Authorization: Bearer <key>`.
+- `name` of the provider is `openai:<model>`.
+
+## Limitations
+
+- **Strict JSON schema.** OpenAI's strict mode requires `additionalProperties: false` and all properties listed as required. SAGU's converter doesn't emit `additionalProperties`, so schemas may be rejected with a 400. Not verified live.
+- **`stream()` is not incremental**: one `text_delta` with the full response.
+- **No retry by default** (see [Reliability](/docs/features/reliability#automatic-retries-in-the-runner)).
+- **OpenAI-compatible endpoints** may work via `baseURL`, but none have been verified.
+
+<SourceList paths={["src/providers/openai.ts", "test/providers.test.ts"]} />

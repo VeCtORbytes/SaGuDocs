@@ -1,0 +1,76 @@
+---
+title: Structured output and schema repair
+description: Typed agent results validated with Zod, with automatic repair prompts.
+---
+
+## What it does
+
+Give an agent an `outputSchema` and a type parameter, `new Agent<T>({...})`. SAGU tells the model to answer in JSON matching the schema, extracts and validates the JSON, and returns it as `result.output: T`. If validation fails, it sends the errors back to the model and asks for a corrected answer, up to `maxRepairAttempts` times.
+
+## What problem it solves
+
+Free text is hard to use in code. Even when asked for JSON, models sometimes wrap it in prose, use the wrong types, or omit fields. Repair turns many of those failures into successes without your code having to retry.
+
+## Example
+
+From <Source path="examples/03-structured-output-and-memory/index.ts" />:
+
+```ts
+import { z } from "zod";
+import { Agent, openai } from "../src/index.ts";
+
+const LeadProfileSchema = z.object({
+  fullName: z.string().describe("Candidate or contact full name"),
+  company: z.string().describe("Company or organization name"),
+  role: z.string().describe("Current role or job title"),
+  interests: z.array(z.string()).describe("List of tech interests or requirements"),
+  confidenceScore: z.number().min(0).max(1).describe("Confidence score between 0 and 1"),
+});
+type LeadProfile = z.infer<typeof LeadProfileSchema>;
+
+const leadExtractor = new Agent<LeadProfile>({
+  name: "LeadProfileExtractor",
+  instructions: "Extract structured lead profiles from customer emails according to the JSON schema.",
+  model: openai(),
+  outputSchema: LeadProfileSchema,
+  maxRepairAttempts: 2,
+});
+
+const result = await leadExtractor.run("Hi, I'm Elena Rostova, VP of Engineering at Apex Cloud Systems…");
+if (result.success) {
+  result.output.interests; // string[]: typed, validated
+} else if (result.error.code === "SAGU_STRUCTURED_OUTPUT_ERROR") {
+  console.log(result.error.message); // lists each failing field
+}
+```
+
+In the example, the first scripted answer omits `company` and sends `confidenceScore` as the string `"0.95"`. The runner replies with a repair prompt, and the second answer passes. The run takes 2 turns.
+
+## How it works internally
+
+1. **Prompting.** Each turn, `zodToJsonSchema(outputSchema)` is appended to the system prompt under `[STRUCTURED OUTPUT REQUIREMENT]`, and also passed as `ProviderRequest.outputSchema`. Only the OpenAI adapter forwards it to the vendor, as `response_format: { type: "json_schema", strict: true }`.
+2. **Extraction.** `extractJsonFromText()` tries, in order: the whole text as JSON, the contents of a fenced code block, then the substring from the first `{` or `[` to the last `}` or `]`.
+3. **Validation.** `schema.safeParse()`. Issues are formatted as `- Field 'company': Required`.
+4. **Repair.** If `repairAttempts < maxRepairAttempts`, the runner appends the bad answer as an `assistant` message and a `user` message containing the formatted errors, then runs another turn.
+5. **Give up.** Once attempts are exhausted, the run fails with `StructuredOutputError { rawOutput, zodIssues, attempts }`.
+
+The parsing helpers are exported if you want them outside an agent: `extractJsonFromText`, `formatZodIssues`, `buildSchemaRepairPrompt`, `parseStructuredOutput`.
+
+## Configuration
+
+| Field | Default | Notes |
+|---|---|---|
+| `outputSchema` | none | Any Zod 3 schema; the conversion is shown in [Tools](/docs/features/tools#limitations-and-common-mistakes) |
+| `maxRepairAttempts` | `2` | Read from the **starting** agent. Each repair costs a turn. |
+
+## Limitations and common mistakes
+
+- **Repairs consume `maxTurns`.** A low `maxTurns` can end the run with `MaxTurnsExceededError` before repair succeeds.
+- **The repair prompt doesn't repeat the schema.** The schema is still in the system prompt.
+- **OpenAI strict mode** requires every property to be listed in `required` and `additionalProperties: false`. SAGU's converter doesn't add `additionalProperties: false`, so the API may reject some schemas. This hasn't been verified against the live API.
+- **Output guardrails don't modify the parsed object.** See [Guardrails](/docs/features/guardrails#limitations-and-common-mistakes).
+- **After a handoff**, the *target* agent's `outputSchema` applies, but `TOutput` is typed from the starting agent.
+
+## Related source
+
+<SourceList paths={["src/structuredOutput.ts", "src/providers/schema.ts", "src/runner.ts", "test/structured_output.test.ts", "examples/03-structured-output-and-memory/index.ts"]} />

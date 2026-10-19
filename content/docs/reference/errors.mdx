@@ -1,0 +1,85 @@
+---
+title: Errors
+description: SaguError and its subclasses, with constructor signatures.
+---
+
+```ts
+type SaguErrorCode =
+  | "SAGU_CONFIG_ERROR"
+  | "SAGU_PROVIDER_ERROR"
+  | "SAGU_GUARDRAIL_ERROR"
+  | "SAGU_TOOL_EXECUTION_ERROR"
+  | "SAGU_STRUCTURED_OUTPUT_ERROR"
+  | "SAGU_HANDOFF_ERROR"
+  | "SAGU_TIMEOUT_ERROR"
+  | "SAGU_MAX_TURNS_EXCEEDED"
+  | "SAGU_MEMORY_ERROR";
+
+class SaguError extends Error {
+  constructor(message: string, code: SaguErrorCode, details?: Record<string, unknown>);
+  readonly code: SaguErrorCode;
+  readonly details?: Record<string, unknown>;
+  toJSON(): Record<string, unknown>;   // { name, code, message, details }
+}
+
+class ConfigurationError extends SaguError {
+  constructor(message: string, details?: Record<string, unknown>);
+}
+
+class ProviderError extends SaguError {
+  constructor(message: string, options: { provider: string; statusCode?: number; isTransient?: boolean; details?: Record<string, unknown> });
+  readonly provider: string;
+  readonly statusCode?: number;
+  readonly isTransient: boolean;   // default: statusCode === 429 || statusCode >= 500
+}
+
+type GuardrailStage = "input" | "output" | "tool";
+class GuardrailError extends SaguError {
+  constructor(stage: GuardrailStage, reason: string, details?: Record<string, unknown>);
+  readonly stage: GuardrailStage;
+  readonly reason: string;
+}
+
+class ToolExecutionError extends SaguError {
+  constructor(message: string, options: { toolName: string; toolCallId?: string; isApprovalDenied?: boolean; isTimeout?: boolean; details?: Record<string, unknown> });
+  readonly toolName: string;
+  readonly toolCallId?: string;
+  readonly isApprovalDenied: boolean;
+  readonly isTimeout: boolean;
+}
+
+class StructuredOutputError extends SaguError {
+  constructor(message: string, options: { rawOutput: string; zodIssues?: unknown[]; attempts: number; details?: Record<string, unknown> });
+  readonly rawOutput: string;
+  readonly zodIssues?: unknown[];
+  readonly attempts: number;
+}
+
+class HandoffError extends SaguError {
+  constructor(message: string, options: { fromAgent: string; toAgent: string; hopCount?: number; details?: Record<string, unknown> });
+  readonly fromAgent: string;
+  readonly toAgent: string;
+  readonly hopCount?: number;
+}
+
+class TimeoutError extends SaguError {
+  constructor(operation: string, timeoutMs: number, details?: Record<string, unknown>);
+  readonly operation: string;
+  readonly timeoutMs: number;
+}
+
+class MaxTurnsExceededError extends SaguError {
+  constructor(maxTurns: number, details?: Record<string, unknown>);
+  readonly maxTurns: number;
+}
+
+class MemoryError extends SaguError {
+  constructor(store: string, operation: string, message: string, details?: Record<string, unknown>);
+  readonly store: string;
+  readonly operation: string;
+}
+```
+
+When each one occurs: [Error handling](/docs/features/error-handling).
+
+<SourceList paths={["src/errors.ts", "test/errors.test.ts"]} />

@@ -1,0 +1,73 @@
+---
+title: Tools and handoffs
+description: defineTool, Tool, ToolContext and the handoff helpers.
+---
+
+## `defineTool`
+
+```ts
+function defineTool<TInput = any, TOutput = any>(options: DefineToolOptions<TInput, TOutput>): Tool<TInput, TOutput>;
+
+interface DefineToolOptions<TInput = any, TOutput = any> {
+  name: string;                     // /^[a-zA-Z0-9_-]+$/ after trim
+  description: string;
+  input: z.ZodType<TInput>;
+  execute: (input: TInput, context?: ToolContext) => Promise<TOutput> | TOutput;
+  requiresApproval?: boolean;
+  timeoutMs?: number;
+}
+```
+
+Throws `ConfigurationError` for invalid options.
+
+## `Tool`
+
+```ts
+interface Tool<TInput = any, TOutput = any> {
+  name: string;
+  description: string;
+  inputSchema: z.ZodType<TInput>;
+  execute: (input: TInput, context?: ToolContext) => Promise<TOutput> | TOutput;
+  requiresApproval?: boolean;
+  timeoutMs?: number;
+  toJSONSchema?: () => Record<string, unknown>;
+}
+
+interface ToolContext {
+  agentName?: string;
+  runId?: string;
+  abortSignal?: AbortSignal;
+  [key: string]: unknown;
+}
+```
+
+You can build a `Tool` object by hand instead of using `defineTool`; without `toJSONSchema`, the model receives `{ type: "object" }` as its parameters.
+
+## Handoff helpers
+
+These power handoffs internally and are exported for advanced use and tests.
+
+```ts
+const HANDOFF_TOOL_PREFIX = "transfer_to_";
+
+function formatHandoffToolName(agentName: string): string;    // "transfer_to_" + lowercased, [^a-z0-9_-] → "_"
+function isHandoffToolName(toolName: string): boolean;        // startsWith(HANDOFF_TOOL_PREFIX)
+function extractTargetAgentName(toolName: string): string;    // strips the prefix (returns the sanitized name)
+function createHandoffTool(targetAgent: Agent<any>): HandoffTool;
+function getAgentHandoffTools(agent: Agent<any>): HandoffTool[];
+function buildCombinedToolSpecs(agent: Agent<any>): {
+  toolSpecs: ToolSpec[];
+  handoffTools: HandoffTool[];
+  allTools: (Tool | HandoffTool)[];
+};
+
+const HandoffInputSchema: z.ZodObject<{ reason: z.ZodOptional<z.ZodString> }>;
+type HandoffInput = { reason?: string };
+
+interface HandoffTool extends Tool<HandoffInput, { transferredTo: string; reason?: string }> {
+  isHandoff: true;
+  targetAgent: Agent<any>;
+}
+```
+
+<SourceList paths={["src/tool.ts", "src/handoff.ts"]} />

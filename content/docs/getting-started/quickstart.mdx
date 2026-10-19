@@ -1,0 +1,101 @@
+---
+title: Quickstart
+description: Build and run a tool-using agent in about five minutes. No API key required.
+---
+
+This builds the smallest complete agent: one tool, one scripted model, one run. It works offline, so you can see the whole loop before you add credentials.
+
+<Callout>Complete [Installation](/docs/getting-started/installation) first. You should be inside your clone of `SaGuSDK`.</Callout>
+
+<Steps>
+<Step>
+
+### Create a file
+
+```bash
+mkdir -p playground
+touch playground/hello.ts
+```
+
+</Step>
+<Step>
+
+### Write the agent
+
+```ts title="playground/hello.ts"
+import { z } from "zod";
+import { Agent, defineTool, mock } from "../src/index.ts";
+
+// 1. A tool: name, description, Zod input schema, execute function.
+const getTime = defineTool({
+  name: "get_time",
+  description: "Return the current time for an IANA time zone.",
+  input: z.object({ timeZone: z.string().describe("e.g. Europe/Paris") }),
+  execute: async ({ timeZone }) => ({
+    timeZone,
+    time: new Date().toLocaleTimeString("en-US", { timeZone }),
+  }),
+});
+
+// 2. A model. mock() replays scripted turns, so this runs offline with no API key.
+const model = mock([
+  { toolCalls: [{ id: "call_1", name: "get_time", arguments: { timeZone: "Europe/Paris" } }] },
+  "I looked it up with the get_time tool.",
+]);
+
+// 3. An agent: instructions + model + tools.
+const agent = new Agent({
+  name: "Clock",
+  instructions: "Answer time questions using the get_time tool.",
+  model,
+  tools: [getTime],
+});
+
+// 4. Run it. run() returns a result object instead of throwing on expected failures.
+const result = await agent.run("What time is it in Paris?");
+
+if (result.success) {
+  console.log("output:", result.output);
+  console.log("turns:", result.turns);
+  const toolMessage = result.messages.find((m) => m.role === "tool");
+  console.log("tool result:", toolMessage?.toolResult?.result);
+} else {
+  console.error(result.error.code, result.error.message);
+}
+```
+
+</Step>
+<Step>
+
+### Run it
+
+```bash
+node playground/hello.ts
+```
+
+```text title="Output (time will differ)"
+output: I looked it up with the get_time tool.
+turns: 2
+tool result: { timeZone: 'Europe/Paris', time: '11:35:45 AM' }
+```
+
+</Step>
+</Steps>
+
+## What just happened
+
+1. **Turn 1.** The runner sent your instructions, the user message and the `get_time` tool spec to the model. The scripted model replied with a tool call.
+2. The runner **validated** `{ timeZone: "Europe/Paris" }` against the Zod schema, **executed** your function, and appended the result to the conversation as a `tool` message.
+3. **Turn 2.** The runner called the model again with the tool result. The model returned plain text, so the loop ended.
+4. `run()` returned `{ success: true, output, turns: 2, messages, usage, trace, agentName }`.
+
+The scripted model doesn't read the tool result. It just replays its second turn. With a real model, the final sentence would use the actual time. That's the next step.
+
+## Next steps
+
+<Cards>
+  <Card title="Use a real model" href="/docs/getting-started/configure-provider" description="Swap mock() for anthropic(), openai() or gemini()." />
+  <Card title="Understand the loop" href="/docs/learn/agent-loop" description="Every step of runner.ts, explained." />
+  <Card title="Stream events" href="/docs/features/streaming" description="Watch tool_start, tool_end and run_completed live." />
+  <Card title="Run the examples" href="/docs/getting-started/run-examples" description="Handoffs, structured output, memory." />
+</Cards>

@@ -1,0 +1,37 @@
+---
+title: What is an AI agent?
+description: A practical definition, with the vocabulary used in the rest of these docs.
+---
+
+A large language model (LLM) on its own takes text in and gives text out. It cannot look up today's weather, query your database or issue a refund. It can only write text that *describes* doing so.
+
+An **agent** is a program that closes that gap:
+
+1. You give the model a goal (**instructions** plus the user's **input**) and a menu of **tools**: functions it may ask you to run.
+2. The model replies with either a final answer or a request: "call `get_weather` with `{ city: "Paris" }`".
+3. Your program runs the function and sends the result back.
+4. Repeat until the model gives a final answer.
+
+The model does the deciding. Your code does the doing. The loop connecting them is the **agent runtime**, and that is what SAGU provides.
+
+## Vocabulary
+
+| Term | Meaning in SAGU |
+|---|---|
+| **Agent** | An `Agent` object: a name, instructions, a model provider, and optional tools, handoffs, guardrails and output schema. Immutable once constructed. |
+| **Instructions** | The system prompt. A string, or a function of the run context that returns one. |
+| **Model provider** | An object implementing `ModelProvider`, which turns SAGU's request into a vendor API call. |
+| **Tool** | A function the model may request, defined with `defineTool()` and a Zod input schema. |
+| **Tool call** | The model's request to run a tool: `{ id, name, arguments }`. |
+| **Turn** | One model call. A run with one tool call and one answer takes two turns. |
+| **Run** | One `agent.run(input)` or `agent.stream(input)` call, from user input to final result. |
+| **Handoff** | Transferring the rest of a run to a different agent. |
+| **Guardrail** | A check that can block or rewrite input, output or a tool call. |
+| **Session** | Conversation history stored between runs under a `sessionId`. |
+| **Graph memory** | Long-term facts stored as `subject → predicate → object` triplets. |
+
+## What an agent is not
+
+An agent is not magic autonomy. In SAGU it is bounded by explicit limits: `maxTurns` (default 10), `maxHandoffs` (default 5), `maxRepairAttempts` (default 2) and per-tool `timeoutMs`. The model only reaches the outside world through tools you wrote.
+
+Next: [What problem does an agent runtime solve?](/docs/learn/why-a-runtime)

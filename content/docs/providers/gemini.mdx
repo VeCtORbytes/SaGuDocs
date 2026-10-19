@@ -1,0 +1,51 @@
+---
+title: Google Gemini
+description: GeminiProvider for the Gemini generateContent API.
+---
+
+## Credentials
+
+Create an API key in Google AI Studio. SAGU reads `GEMINI_API_KEY`, then `GOOGLE_API_KEY`, or the `apiKey` option, which takes precedence.
+
+```bash
+export GEMINI_API_KEY="your-key-here"
+```
+
+## Usage
+
+```ts
+import { Agent, gemini } from "../src/index.ts";
+
+const agent = new Agent({
+  name: "Assistant",
+  instructions: "Be concise.",
+  model: gemini({ model: "your-model-id" }),
+});
+```
+
+## Options
+
+<TypeTable
+  type={{
+    apiKey: { type: 'string', description: 'API key, sent as the ?key= query parameter.', default: 'GEMINI_API_KEY ?? GOOGLE_API_KEY' },
+    model: { type: 'string', description: 'Model ID, used in the URL path.', default: '"gemini-1.5-pro"' },
+    baseURL: { type: 'string', description: 'API base. Requests go to {baseURL}/models/{model}:generateContent.', default: '"https://generativelanguage.googleapis.com/v1beta"' },
+    fetch: { type: 'typeof fetch', description: 'Custom fetch.', default: 'globalThis.fetch' },
+  }}
+/>
+
+## Request mapping
+
+- `systemPrompt` → `systemInstruction`. Assistant messages → role `model`. Tool calls → `functionCall` parts; tool results → `functionResponse` parts.
+- `tools` → `[{ functionDeclarations: [...] }]`.
+- `temperature` / `maxTokens` → `generationConfig`.
+- `name` of the provider is `gemini:<model>`.
+
+## Limitations
+
+- **The API key is in the URL.** Make sure proxies or custom `fetch` wrappers don't log full URLs.
+- **`outputSchema`** is not sent natively; it relies on the prompt plus validation.
+- **`stream()` is not incremental.**
+- **The default model ID is old** and may be retired. Pass `model`.
+
+<SourceList paths={["src/providers/gemini.ts", "test/providers.test.ts"]} />

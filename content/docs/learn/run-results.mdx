@@ -1,0 +1,64 @@
+---
+title: Reading a run result
+description: The RunResult shape, and how to tell what went wrong.
+---
+
+`agent.run()` resolves to a discriminated union. Check `success` first and TypeScript narrows the rest:
+
+```ts
+type RunResult<TOutput = string> =
+  | { success: true;  output: TOutput;    messages: Message[]; usage: TokenUsage; agentName: string; turns: number; trace?: Trace }
+  | { success: false; error: SaguError;   messages: Message[]; usage: TokenUsage; agentName: string; turns: number; trace?: Trace };
+```
+
+| Field | Meaning |
+|---|---|
+| `output` | The final answer: a `string`, or the parsed `TOutput` if the agent has an `outputSchema` |
+| `error` | A `SaguError` subclass with a stable `code` |
+| `messages` | Full history for this run: prior session messages, then user, assistant, tool… |
+| `usage` | Summed `promptTokens`, `completionTokens` and `totalTokens` across all model calls (only what providers report) |
+| `agentName` | The agent that was **active at the end**, which differs from the starting agent after a handoff |
+| `turns` | Number of model calls made |
+| `trace` | Span tree with secrets redacted. Always set by the runner. |
+
+## Handling it
+
+```ts
+const result = await agent.run(input);
+
+if (result.success) {
+  reply(result.output);
+} else {
+  switch (result.error.code) {
+    case "SAGU_GUARDRAIL_ERROR":
+      reply("Sorry, I can't help with that.");
+      break;
+    case "SAGU_MAX_TURNS_EXCEEDED":
+    case "SAGU_STRUCTURED_OUTPUT_ERROR":
+      log.warn(result.error.toJSON(), result.messages);
+      reply("I couldn't finish that request.");
+      break;
+    default:
+      log.error(result.error.toJSON());
+      reply("Something went wrong.");
+  }
+}
+```
+
+`error.toJSON()` returns `{ name, code, message, details }`, which is safe to log. Subclasses add typed fields, for example `GuardrailError.stage`, `StructuredOutputError.rawOutput` and `HandoffError.hopCount`. See [Error handling](/docs/features/error-handling).
+
+## Return vs throw
+
+| Situation | Behaviour |
+|---|---|
+| Bad configuration at construction (`new Agent`, `defineTool`, `new FallbackProvider([])`) | **Throws** `ConfigurationError` |
+| Anything that goes wrong *during* a run | **Returned** as `{ success: false, error }` |
+| A tool fails | **Neither.** The model is told, and the run continues |
+
+## Debugging checklist
+
+1. Print `result.turns` and `result.messages.map(m => m.role)` to see the shape of the conversation.
+2. Look for `tool` messages with `toolResult.isError`.
+3. Pass `traceExporter: new ConsoleExporter()` to see timing and span attributes.
+
+Continue to the [core features](/docs/features/tools).

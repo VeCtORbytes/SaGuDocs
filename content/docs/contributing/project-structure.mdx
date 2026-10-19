@@ -1,0 +1,63 @@
+---
+title: Project structure
+description: Where everything lives in the repository.
+---
+
+```text
+SaGuSDK/
+├── src/
+│   ├── index.ts               # Public API: every export
+│   ├── agent.ts               # Agent<TOutput>: immutable configuration
+│   ├── runner.ts              # streamAgent / runAgent: the agent loop
+│   ├── tool.ts                # defineTool()
+│   ├── handoff.ts             # transfer_to_* tools
+│   ├── guardrails.ts          # Guardrail helpers
+│   ├── structuredOutput.ts    # JSON extraction, validation, repair prompt
+│   ├── events.ts              # AgentEvent + type guards
+│   ├── trace.ts               # TraceRecorder, ConsoleExporter, JSONFileExporter
+│   ├── reliability.ts         # withRetry, withTimeout, redactSecrets
+│   ├── errors.ts              # SaguError hierarchy
+│   ├── types.ts               # Core contracts
+│   ├── providers/
+│   │   ├── types.ts           # Provider type re-exports
+│   │   ├── schema.ts          # zodToJsonSchema
+│   │   ├── mock.ts            # MockProvider
+│   │   ├── anthropic.ts       # AnthropicProvider
+│   │   ├── openai.ts          # OpenAIProvider
+│   │   ├── gemini.ts          # GeminiProvider
+│   │   └── fallback.ts        # FallbackProvider
+│   └── memory/
+│       ├── types.ts           # SessionStore, GraphMemoryStore
+│       ├── inMemory.ts        # InMemorySession
+│       ├── file.ts            # FileSession
+│       ├── sqlite.ts          # SqliteSession (node:sqlite)
+│       ├── graphMemory.ts     # InMemoryGraphMemoryStore, createAutoGraphMemoryStore
+│       ├── neo4jGraphMemory.ts# Neo4jGraphMemoryStore
+│       └── graphMemoryTools.ts# remember_fact / recall_facts
+├── examples/                  # 01–04, runnable with node
+├── test/                      # node --test suites
+├── docs/                      # Original Markdown docs (GitHub Pages)
+├── PLAN.md                    # Design notes
+└── package.json               # name: sagu-sdk, dependency: zod
+```
+
+This documentation site is a separate repository: [VeCtORbytes/SaGuDocs](https://github.com/VeCtORbytes/SaGuDocs).
+
+## Layers
+
+| Layer | Lifetime | Code |
+|---|---|---|
+| **Agent configuration** | Immutable after `new Agent()` | `agent.ts`, `types.ts` (`AgentConfig`) |
+| **Run state** | One `run()`/`stream()` call | Local variables in `streamAgent()`: messages, turn, handoffCount, usage, trace |
+| **Session state** | Across runs, per `sessionId` | `memory/` session stores |
+| **Long-term memory** | Across sessions and agents | `memory/` graph stores, accessed via tools |
+
+## Dependencies
+
+| Package | Kind | Why |
+|---|---|---|
+| `zod` | dependency | Schemas for tools and structured output |
+| `neo4j-driver` | optional | Only for `Neo4jGraphMemoryStore` (dynamic import) |
+| `typescript`, `@types/node` | dev | Typechecking |
+
+Everything else uses Node.js built-ins: `fetch`, `node:crypto`, `node:fs`, `node:sqlite`, `node:test`.

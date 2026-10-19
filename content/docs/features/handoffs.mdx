@@ -1,0 +1,90 @@
+---
+title: Multi-agent handoffs
+description: Transfer the rest of a run to a specialist agent, with context preserved and loops capped.
+---
+
+## What it does
+
+An agent with `handoffs: [otherAgent, …]` gets one synthetic tool per target, named `transfer_to_<name>`. When the model calls it, the runner makes the target the **active agent** for the rest of the run. The target's instructions, model, tools and output guardrails then apply, and the message history carries over.
+
+## What problem it solves
+
+One agent with every tool and every instruction gets confused and expensive. Handoffs let you build small specialists (billing, tech support, research) plus a router, without writing routing code yourself.
+
+## When to use it
+
+- A triage agent routes to specialists.
+- A specialist hands back, or forward, when the request changes topic.
+- Different steps need different models (a cheap router, a stronger specialist).
+
+## Example
+
+Adapted from <Source path="examples/02-support-triage-handoff/index.ts" />:
+
+```ts
+import { z } from "zod";
+import { Agent, defineTool, mock } from "../src/index.ts";
+
+const issueRefund = defineTool({
+  name: "issue_refund",
+  description: "Issue a monetary refund to a customer account.",
+  input: z.object({ invoiceId: z.string(), amount: z.number(), reason: z.string() }),
+  execute: async (input) => ({ status: "APPROVED", refundId: "ref_884920", ...input }),
+});
+
+const billing = new Agent({
+  name: "BillingSpecialist",
+  instructions: "You are a billing specialist. Use issue_refund for refunds.",
+  model: mock([
+    { toolCalls: [{ id: "r1", name: "issue_refund", arguments: { invoiceId: "INV-9921", amount: 79.99, reason: "Accidental renewal" } }] },
+    "Your refund of $79.99 for INV-9921 is processed.",
+  ]),
+  tools: [issueRefund],
+});
+
+const triage = new Agent({
+  name: "TriageAgent",
+  instructions: "Route the customer to BillingSpecialist or TechSpecialist.",
+  model: mock([
+    { toolCalls: [{ id: "h1", name: "transfer_to_billingspecialist", arguments: { reason: "Refund request" } }] },
+  ]),
+  handoffs: [billing],
+  maxHandoffs: 3,
+});
+
+for await (const event of triage.stream("I was charged twice on INV-9921.")) {
+  if (event.type === "handoff") console.log(`${event.fromAgent} → ${event.toAgent}: ${event.reason}`);
+  if (event.type === "run_completed") console.log(event.agentName, event.output);
+}
+```
+
+<HandoffDiagram />
+
+## How it works internally
+
+1. **Tool generation.** `createHandoffTool(target)` names the tool `transfer_to_` + the target name lowercased, with anything outside `[a-z0-9_-]` replaced by `_`. `BillingSpecialist` becomes `transfer_to_billingspecialist`. Its only argument is optional: `{ reason?: string }`.
+2. **Detection.** When the model calls a tool whose name starts with `transfer_to_` *and* matches one of the active agent's handoff tools, the runner increments `handoffCount` and yields a `handoff` event.
+3. **Loop prevention.** If `handoffCount > maxHandoffs`, the run fails with `HandoffError { fromAgent, toAgent, hopCount }`. `maxHandoffs` comes from `RunOptions`, otherwise the **starting** agent (default 5).
+4. **Switch.** `currentAgent = target`. A `tool` message `{ transferred: true, from, to, reason, note }` is appended so the new agent sees why it was called. A `handoff` trace span records `fromAgent`, `toAgent` and `hopCount`.
+5. **Continue.** The next turn uses the new agent's instructions, tools and handoff targets.
+
+## Configuration
+
+| Option | Where | Default |
+|---|---|---|
+| `handoffs` | `AgentConfig` | `[]` |
+| `maxHandoffs` | `AgentConfig` (starting agent) or `RunOptions` | `5` |
+| `maxTurns` | `AgentConfig` (starting agent) or `RunOptions` | `10`, shared across all agents in the run |
+
+## Limitations and common mistakes
+
+- **Handoffs are one-way per edge.** To let a specialist hand back, add the triage agent to the specialist's `handoffs`. Circular references between agents are fine at runtime because the loop is capped.
+- **Name collisions.** `Billing Team` and `billing_team` both map to `transfer_to_billing_team`.
+- **The `handoff` event fires before the limit check**, so the event that exceeds the limit is still emitted, followed by `run_failed`.
+- **Turns are shared.** A deep chain can hit `maxTurns` before `maxHandoffs`.
+- **Input guardrails of the target agent don't run.** Only the starting agent's input guardrails apply.
+- **The full history is shared**, including earlier tool results. There is no per-agent context filtering.
+
+## Related source
+
+<SourceList paths={["src/handoff.ts", "src/runner.ts", "test/handoff.test.ts", "examples/02-support-triage-handoff/index.ts"]} />

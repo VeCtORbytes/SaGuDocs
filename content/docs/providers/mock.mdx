@@ -1,0 +1,60 @@
+---
+title: MockProvider
+description: A deterministic, scriptable model for tests, examples and offline development.
+---
+
+`MockProvider` replays a queue of scripted turns, one per model call. It never touches the network, so every test and example in the repository runs without API keys.
+
+## Creating one
+
+```ts
+import { mock, MockProvider } from "../src/index.ts";
+
+const a = mock(["Hello!"]);                         // array of turns
+const b = new MockProvider({
+  name: "test-model",
+  script: ["first", "second"],
+  defaultResponse: "Mock response",                  // used when the script is exhausted
+  latencyMs: 50,                                     // simulated delay per call
+});
+```
+
+## Turn types
+
+```ts
+const model = mock([
+  // 1. Plain text: becomes { content, stopReason: "end_turn" }
+  "The answer is 42.",
+
+  // 2. Explicit response: tool calls, content, usage, stopReason
+  { toolCalls: [{ id: "c1", name: "calculate", arguments: { expression: "6 * 7" } }] },
+
+  // 3. Simulated failure: throws ProviderError
+  { error: "Rate limited", statusCode: 429, isTransient: true },
+
+  // 4. Function: compute a response from the request
+  (request) => ({ content: `I saw ${request.messages.length} messages`, stopReason: "end_turn" }),
+]);
+```
+
+## Inspecting requests
+
+```ts
+await agent.run("hi");
+model.requests;     // ProviderRequest[]: everything the runner sent
+model.lastRequest;  // the most recent one
+model.enqueueTurn("another turn");
+model.setScript(["reset script"]);
+model.reset();      // clears both queue and history
+```
+
+Use `lastRequest.systemPrompt`, `lastRequest.tools` and `lastRequest.messages` to assert what the runner sent: for example that `outputSchema` was appended, or that a handoff tool exists.
+
+## Behaviour details
+
+- `stream()` calls `generate()`, then yields the text split on spaces as separate `text_delta` chunks, and one `tool_call_delta` per tool call.
+- Throws a non-transient `ProviderError` if `abortSignal` is already aborted.
+- Synthetic usage: about 10–15 prompt tokens per call plus a word count. Don't read meaning into it.
+- The mock **does not interpret** instructions or tool results; turns are consumed in order regardless of what the runner sends.
+
+<SourceList paths={["src/providers/mock.ts", "test/mock_provider.test.ts"]} />

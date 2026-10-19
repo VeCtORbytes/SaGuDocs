@@ -1,0 +1,47 @@
+---
+title: FallbackProvider
+description: Chain providers so a failure on one moves to the next.
+---
+
+`FallbackProvider` is a `ModelProvider` that wraps others. On each model call it tries them in order and returns the first success.
+
+## Usage
+
+```ts
+import { Agent, FallbackProvider, anthropic, fallback, gemini, openai } from "../src/index.ts";
+
+// Factory: fallback(primary, ...fallbacks). Alias: fallbackProvider.
+const model = fallback(anthropic(), openai(), gemini());
+
+// Class: needed to pass options.
+const observed = new FallbackProvider([anthropic(), openai()], {
+  onFallback: (failedProvider, nextProvider, error) => {
+    console.warn(`[fallback] ${failedProvider} → ${nextProvider}`, error);
+  },
+});
+
+const agent = new Agent({ name: "HA", instructions: "Assist.", model: observed });
+```
+
+## Credentials
+
+Each member needs its own credentials. A member with a missing key throws `ConfigurationError`, which the fallback catches like any other error and moves on.
+
+## Behaviour
+
+| Aspect | Behaviour |
+|---|---|
+| Which errors trigger fallback | **All** errors, not only transient ones |
+| Order | Array order; the first provider is tried on every call (no stickiness) |
+| All failed | `ProviderError` listing each provider's message, with `details.errors` |
+| `stream()` | Uses each member's `stream()` if present, otherwise `generate()` |
+| `name` | `fallback(a -> b -> c)` |
+
+## Limitations
+
+- **Construction** with an empty list throws `ConfigurationError`.
+- **No backoff.** It moves to the next provider immediately; it doesn't retry the same one.
+- **Fallback isn't traced.** Use `onFallback` to log it.
+- **Different vendors behave differently.** Tool-calling quality and structured-output support vary, so test your agent against each member.
+
+<SourceList paths={["src/providers/fallback.ts", "test/providers.test.ts"]} />

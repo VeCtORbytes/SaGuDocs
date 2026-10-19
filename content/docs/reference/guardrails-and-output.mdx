@@ -1,0 +1,49 @@
+---
+title: Guardrails and structured output
+description: Guardrail types, guardrail helpers and structured-output helpers.
+---
+
+## Guardrail types
+
+```ts
+interface GuardrailResult<T = string> { pass: boolean; reason?: string; modified?: T; }
+interface GuardrailContext { agentName?: string; runId?: string; [key: string]: unknown; }
+
+type InputGuardrail  = (input: string,     context?: GuardrailContext) => GuardrailResult<string>   | Promise<GuardrailResult<string>>;
+type OutputGuardrail = (output: string,    context?: GuardrailContext) => GuardrailResult<string>   | Promise<GuardrailResult<string>>;
+type ToolGuardrail   = (toolCall: ToolCall, context?: GuardrailContext) => GuardrailResult<ToolCall> | Promise<GuardrailResult<ToolCall>>;
+```
+
+The runner ignores `modified` from tool guardrails; only `pass` and `reason` are used for tools.
+
+## Guardrail helpers
+
+```ts
+function createRegexInputGuardrail(options: { pattern: RegExp; reason?: string; replaceWith?: string }): InputGuardrail;
+function createRegexOutputGuardrail(options: { pattern: RegExp; reason?: string; replaceWith?: string }): OutputGuardrail;
+function createLengthGuardrail(options: { minLength?: number; maxLength?: number; stage?: "input" | "output" }): (text: string) => GuardrailResult<string>;
+function createToolAllowlistGuardrail(allowedToolNames: string[]): ToolGuardrail;
+function createToolParameterGuardrail(
+  toolName: string,
+  validator: (args: Record<string, unknown> | string) => boolean | Promise<boolean>,
+  reason?: string,
+): ToolGuardrail;
+```
+
+## Structured output helpers
+
+```ts
+function extractJsonFromText(text: string): unknown;
+// whole text → fenced code block → first {/[ … last }/]; throws Error if none parse
+
+function formatZodIssues(issues: z.ZodIssue[]): string;
+// "- Field 'a.b': message" per issue; root path shown as "(root)"
+
+function buildSchemaRepairPrompt(options: { rawOutput: string; errorMessage: string; schemaJson?: Record<string, unknown> }): string;
+
+function parseStructuredOutput<T>(rawText: string, schema: z.ZodType<T>, attemptCount?: number):
+  | { success: true; data: T }
+  | { success: false; error: StructuredOutputError; repairPrompt: string };
+```
+
+<SourceList paths={["src/guardrails.ts", "src/structuredOutput.ts"]} />

@@ -1,0 +1,33 @@
+---
+title: Provider guides
+description: Credentials, options and limitations for each built-in model provider.
+---
+
+<Callout title="Bring your own credentials">
+  SAGU does not provide model access. For a real model, you need an account and API key with the vendor, and you
+  pay the vendor directly. SAGU sends requests from your process using `fetch`.
+</Callout>
+
+| Provider | Factory | Credentials | Default model in source | Guide |
+|---|---|---|---|---|
+| Mock | `mock()` | none | n/a | [MockProvider](/docs/providers/mock) |
+| OpenAI | `openai()` | `OPENAI_API_KEY` or `apiKey` | `gpt-4o` | [OpenAI](/docs/providers/openai) |
+| Anthropic | `anthropic()` | `ANTHROPIC_API_KEY` or `apiKey` | `claude-3-5-sonnet-20241022` | [Anthropic](/docs/providers/anthropic) |
+| Gemini | `gemini()` | `GEMINI_API_KEY` / `GOOGLE_API_KEY` or `apiKey` | `gemini-1.5-pro` | [Gemini](/docs/providers/gemini) |
+| Fallback | `fallback(...)` | those of its members | n/a | [FallbackProvider](/docs/providers/fallback) |
+
+## Capabilities at a glance
+
+| | Mock | OpenAI | Anthropic | Gemini |
+|---|---|---|---|---|
+| Tool calling | scripted | ✓ | ✓ | ✓ |
+| `stream()` | word chunks | full text, one chunk | full text, one chunk | full text, one chunk |
+| Forwards `outputSchema` | n/a | ✓ (`response_format`) | prompt only | prompt only |
+| `temperature` | ignored | ✓ | ✓ | ✓ |
+| Token usage reported | synthetic | from API | from API | from API |
+| Custom `baseURL` | n/a | ✓ | ✓ | ✓ |
+| Custom `fetch` | n/a | ✓ | ✓ | ✓ |
+
+The real adapters are unit-tested with a stubbed `fetch` (<Source path="test/providers.test.ts" />). They have not been exercised against live APIs as part of this documentation.
+
+Writing your own adapter: [How model providers fit in](/docs/learn/providers#writing-your-own-provider).

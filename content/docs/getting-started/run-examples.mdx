@@ -1,0 +1,48 @@
+---
+title: Run the examples
+description: Run the four bundled examples. They work offline with the scripted mock model.
+---
+
+All four examples live in <Source path="examples" /> and use `mock()`, so they need no API keys or network. Run them from the repository root:
+
+```bash
+node examples/01-basic-tool-agent/index.ts
+node examples/02-support-triage-handoff/index.ts
+node examples/03-structured-output-and-memory/index.ts
+node examples/04-graph-memory-longterm-recall/index.ts
+```
+
+| Example | Shows | Walkthrough |
+|---|---|---|
+| `01-basic-tool-agent` | `defineTool`, `Agent`, `ConsoleExporter` trace, token usage | [Basic tool agent](/docs/examples/basic-tool-agent) |
+| `02-support-triage-handoff` | Handoffs between three agents, `agent.stream()` events | [Support triage handoff](/docs/examples/support-triage-handoff) |
+| `03-structured-output-and-memory` | `Agent<LeadProfile>`, schema repair, `SqliteSession` across two runs | [Structured output & memory](/docs/examples/structured-output-and-memory) |
+| `04-graph-memory-longterm-recall` | `createGraphMemoryTools`, `InMemoryGraphMemoryStore`, recall from a fresh agent | [Graph memory recall](/docs/examples/graph-memory-longterm-recall) |
+
+## Expected output of example 01
+
+```text
+=== Sagu SDK: Example 01 - Basic Tool Agent ===
+User: What is 125 * 8?
+
+┌─ [SAGU TRACE] Run ID: 2846f1ed-… (1ms)
+│  Usage: 51 tokens (25 in / 26 out)
+│  └─ agent_run (1ms) ✔
+│     ├─ model_call (0ms) ✔
+│     ├─ tool_execution (0ms) ✔
+│     └─ model_call (0ms) ✔
+└─────────────────────────────────────────────────────────
+
+Assistant Output:
+ 125 multiplied by 8 equals 1,000.
+
+Total Turns: 2
+Token Usage: { promptTokens: 25, completionTokens: 26, totalTokens: 51 }
+Message History Count: 4
+```
+
+(Span attribute lines are trimmed here.) The token counts come from the mock provider's synthetic usage, not a real tokenizer.
+
+## Running an example against a real model
+
+The examples script their model turns with `mock([...])`. To try one with a real provider, copy it into `playground/`, change the import to `"../src/index.ts"`, and replace `mock([...])` with `anthropic()`, `openai()` or `gemini()`. Real models choose their own tool calls, so output varies.

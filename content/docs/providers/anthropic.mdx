@@ -1,0 +1,53 @@
+---
+title: Anthropic
+description: AnthropicProvider for the Claude Messages API.
+---
+
+## Credentials
+
+Create an API key in the Anthropic Console. SAGU reads `ANTHROPIC_API_KEY`, or the `apiKey` option, which takes precedence.
+
+```bash
+export ANTHROPIC_API_KEY="your-key-here"
+```
+
+## Usage
+
+```ts
+import { Agent, anthropic } from "../src/index.ts";
+
+const agent = new Agent({
+  name: "Assistant",
+  instructions: "Be concise.",
+  model: anthropic({ model: "your-model-id" }),
+});
+```
+
+## Options
+
+<TypeTable
+  type={{
+    apiKey: { type: 'string', description: 'API key, sent as the x-api-key header.', default: 'process.env.ANTHROPIC_API_KEY' },
+    model: { type: 'string', description: 'Model ID.', default: '"claude-3-5-sonnet-20241022"' },
+    baseURL: { type: 'string', description: 'API base. Requests go to {baseURL}/messages.', default: '"https://api.anthropic.com/v1"' },
+    anthropicVersion: { type: 'string', description: 'anthropic-version header.', default: '"2023-06-01"' },
+    fetch: { type: 'typeof fetch', description: 'Custom fetch.', default: 'globalThis.fetch' },
+  }}
+/>
+
+## Request mapping
+
+- `systemPrompt` → top-level `system`. `system`-role messages in history are skipped.
+- Assistant tool calls → `tool_use` content blocks. Tool results → a `user` message with a `tool_result` block (`tool_use_id`, stringified content).
+- `tools` → `[{ name, description, input_schema }]`.
+- `max_tokens` is always sent: `request.maxTokens ?? 2048`. The runner never sets `maxTokens`, so it is effectively **2048**.
+- `name` of the provider is `anthropic:<model>`.
+
+## Limitations
+
+- **`max_tokens` fixed at 2048** through the agent API. Long answers may stop with `stopReason: "max_tokens"`.
+- **`outputSchema`** is not sent as a native parameter; structured output relies on the system prompt plus SAGU validation and repair.
+- **`stream()` is not incremental.**
+- **The default model ID is old** and may be retired. Pass `model`.
+
+<SourceList paths={["src/providers/anthropic.ts", "test/providers.test.ts"]} />

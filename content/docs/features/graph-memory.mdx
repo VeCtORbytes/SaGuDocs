@@ -1,0 +1,77 @@
+---
+title: Graph memory
+description: Long-term facts as subject → predicate → object triplets, stored in memory or Neo4j and used through tools.
+---
+
+## What it does
+
+A `GraphMemoryStore` holds facts such as `(User) -[PREFERS_LANGUAGE]-> (TypeScript)`. `createGraphMemoryTools(store)` returns two tools you add to any agent:
+
+| Tool | Arguments | Does |
+|---|---|---|
+| `remember_fact` | `subject`, `predicate`, `object` (strings) | `store.remember({ subject, predicate, object })` |
+| `recall_facts` | `about` (string), `limit` (number, default 5) | `store.recall({ about, limit })`, returning `{ count, facts, summary }` |
+
+The model decides when to store and when to look facts up.
+
+## What problem it solves
+
+Session history is long, linear and tied to one conversation. Facts are compact and reusable: a different agent, in a new session with no chat history, can recall that the user prefers TypeScript.
+
+## Example
+
+From <Source path="examples/04-graph-memory-longterm-recall/index.ts" />:
+
+```ts
+import { Agent, InMemoryGraphMemoryStore, createGraphMemoryTools, anthropic } from "../src/index.ts";
+
+const graphStore = new InMemoryGraphMemoryStore();
+const graphTools = createGraphMemoryTools(graphStore);
+
+const collector = new Agent({
+  name: "ProfileCollector",
+  instructions: "When users state preferences or project details, store them using remember_fact.",
+  model: anthropic(),
+  tools: graphTools,
+});
+
+const architect = new Agent({
+  name: "ArchitectAssistant",
+  instructions: "Before designing architectures, consult long-term memory using recall_facts.",
+  model: anthropic(),
+  tools: graphTools,
+});
+
+await collector.run("I exclusively write TypeScript and our database is PostgreSQL with Neo4j.");
+await architect.run("What tech stack do you recommend for my next microservice?"); // no shared session
+```
+
+To switch to Neo4j without code changes, use `createAutoGraphMemoryStore()`. It returns a Neo4j store when `NEO4J_URI` is set, otherwise an in-memory one.
+
+<MemoryDiagram />
+
+## How it works internally
+
+- **In-memory store.** An array of entries. `remember` replaces an existing entry if subject, predicate and object match case-insensitively; otherwise it appends. `recall` returns entries where the whole `about` string appears in the triplet, **or any whitespace-separated word** of it appears in the subject, predicate or object (default limit 10).
+- **Neo4j store.** `remember` runs `MERGE (s:Entity {name}) MERGE (o:Entity {name}) MERGE (s)-[r:RELATION {type}]->(o) SET r.updatedAt = timestamp()`. `recall` matches relations where `toLower(name or type) CONTAINS toLower($about)`, using the **whole** `about` string, not individual words.
+- Graph memory is **not wired into the runner**. There are no automatic reads or writes, no graph events and no graph spans. Its tool calls do appear as `tool_execution` spans and `tool_start`/`tool_end` events.
+
+## Limitations
+
+<Callout type="warn" title="Not implemented today">
+  There is **no automatic fact extraction** from conversations, **no background processes** that link, merge, prune
+  or score facts, and **no confidence or timestamps** in the in-memory store. Everything in the graph was written by a
+  model calling `remember_fact` (or your own code calling `store.remember`).
+</Callout>
+
+- **In-memory facts are lost on restart.** Use Neo4j for persistence.
+- **Neo4j recall is substring-only.** `"language database preference"` matches only if that exact phrase appears, unlike the in-memory store's word matching. Ask the model to recall short entity names.
+- **`metadata` is not stored in Neo4j.**
+- **Neo4j credentials** come from `NEO4J_USER` / `NEO4J_PASSWORD`; the `username`/`password` options are ignored. See [Environment variables](/docs/getting-started/environment-variables).
+- **Duplicates by meaning** (`PREFERS` vs `LIKES`, `TS` vs `TypeScript`) are not merged.
+
+Setup details: [Graph memory guide](/docs/memory/graph).
+
+## Related source
+
+<SourceList paths={["src/memory/graphMemory.ts", "src/memory/neo4jGraphMemory.ts", "src/memory/graphMemoryTools.ts", "test/memory.test.ts", "examples/04-graph-memory-longterm-recall/index.ts"]} />

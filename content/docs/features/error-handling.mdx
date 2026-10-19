@@ -1,0 +1,67 @@
+---
+title: Error handling
+description: The SaguError hierarchy, error codes, and the return-vs-throw rule.
+---
+
+## The rule
+
+- **Programmer errors throw synchronously.** Invalid `Agent` or `defineTool` config, or an empty `FallbackProvider`, throws `ConfigurationError` when the object is constructed.
+- **Runtime outcomes are returned.** Anything that goes wrong during `run()` comes back as `{ success: false, error }`, and `stream()` ends with a `run_failed` event.
+- **Tool failures are neither.** They're reported to the model, and the run continues.
+
+## What problem it solves
+
+Agent runs fail in many expected ways: the user is blocked, the model rambles past `maxTurns`, a vendor rate-limits you. Treating those as exceptions makes every call site a try/catch. A result union makes the failure path explicit and typed.
+
+## Error classes
+
+All extend `SaguError`, which has `code`, `message`, `details?` and `toJSON()`.
+
+| Class | `code` | Extra fields | Typical cause |
+|---|---|---|---|
+| `ConfigurationError` | `SAGU_CONFIG_ERROR` | | Bad config; missing API key |
+| `ProviderError` | `SAGU_PROVIDER_ERROR` | `provider`, `statusCode?`, `isTransient` | Vendor HTTP or network error; all fallbacks failed |
+| `GuardrailError` | `SAGU_GUARDRAIL_ERROR` | `stage`, `reason` | Input or output guardrail blocked |
+| `ToolExecutionError` | `SAGU_TOOL_EXECUTION_ERROR` | `toolName`, `toolCallId?`, `isApprovalDenied`, `isTimeout` | Exported for your own use; the runner reports tool errors to the model instead |
+| `StructuredOutputError` | `SAGU_STRUCTURED_OUTPUT_ERROR` | `rawOutput`, `zodIssues?`, `attempts` | Repair attempts exhausted |
+| `HandoffError` | `SAGU_HANDOFF_ERROR` | `fromAgent`, `toAgent`, `hopCount?` | `maxHandoffs` exceeded |
+| `TimeoutError` | `SAGU_TIMEOUT_ERROR` | `operation`, `timeoutMs` | `withTimeout` expired |
+| `MaxTurnsExceededError` | `SAGU_MAX_TURNS_EXCEEDED` | `maxTurns` | No final answer within `maxTurns` |
+| `MemoryError` | `SAGU_MEMORY_ERROR` | `store`, `operation` | Session or graph store failure |
+
+## Example
+
+```ts
+import { GuardrailError, MaxTurnsExceededError, ProviderError } from "../src/index.ts";
+
+const result = await agent.run(input);
+if (!result.success) {
+  const { error } = result;
+  if (error instanceof GuardrailError) {
+    console.warn(`Blocked at ${error.stage}: ${error.reason}`);
+  } else if (error instanceof ProviderError && error.isTransient) {
+    // e.g. 429 / 5xx: retry later
+  } else if (error instanceof MaxTurnsExceededError) {
+    console.warn(`Gave up after ${error.maxTurns} turns`);
+  } else {
+    console.error(error.toJSON());
+  }
+}
+```
+
+Switching on `error.code` works just as well, and survives serialization.
+
+## How it works internally
+
+The whole run body in `streamAgent()` sits in a try/catch. Known failure points yield `run_failed` with a specific error. Anything unexpected is caught. If it isn't already a `SaguError`, it's wrapped as `new SaguError(message, "SAGU_PROVIDER_ERROR")`.
+
+## Limitations and common mistakes
+
+- **Unknown exceptions are labelled `SAGU_PROVIDER_ERROR`** even if they came from your instructions function or a custom store. Check `error.message`.
+- **Aborting via `signal`** yields a plain `SaguError` with code `SAGU_CONFIG_ERROR` and message `Run aborted by signal`. There is no dedicated abort code.
+- **Don't expect `ToolExecutionError` in results.** Tool failures are reported to the model as text.
+- **Exceptions thrown inside `onApprovalRequired`** or a guardrail end the run as `run_failed`.
+
+## Related source
+
+<SourceList paths={["src/errors.ts", "src/runner.ts", "test/errors.test.ts"]} />

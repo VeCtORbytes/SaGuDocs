@@ -1,0 +1,31 @@
+---
+title: Keeping docs in sync
+description: A checklist for updating this site when the SDK changes.
+---
+
+These docs live in the [SaGuDocs](https://github.com/VeCtORbytes/SaGuDocs) repository and make specific claims: defaults, error messages, span names, environment variables. When the code changes, check:
+
+## Checklist
+
+- [ ] **New or removed export in `src/index.ts`?** Update the table in [API reference](/docs/reference) and the matching reference page.
+- [ ] **Changed a default** (`maxTurns`, `maxHandoffs`, `maxRepairAttempts`, model IDs, `storageDir`, `filename`, retry options)? Search `content/docs` in SaGuDocs for the old value.
+- [ ] **New `process.env` read?** Update [Environment variables](/docs/getting-started/environment-variables). Find them with `grep -rn "process.env" src`.
+- [ ] **Changed the order of steps in `runner.ts`?** Update [How the agent loop works](/docs/learn/agent-loop), [How tool calls work](/docs/learn/tool-calls) and `RuntimeDiagram` in `components/diagrams.tsx`.
+- [ ] **New event type or span name?** Update [Streaming](/docs/features/streaming) and [Tracing](/docs/features/tracing).
+- [ ] **Changed an example?** Re-run it and update its walkthrough page and expected output.
+- [ ] **Fixed something on the [Known limitations](/docs/contributing/limitations) list?** Remove it there and in the linked feature page's Limitations section.
+- [ ] **Published to npm?** Rewrite [Installation](/docs/getting-started/installation), change every `"../src/index.ts"` import to the package name, and update the hero badge in `app/(home)/page.tsx`.
+- [ ] Run `npm test` in SaGuSDK and `npm run build` in SaGuDocs before merging.
+
+## Useful commands
+
+```bash
+# In SaGuSDK: all exports, to diff against the reference table
+grep -E "^export" src/index.ts
+
+# In SaGuDocs: every snippet's import line, to catch stale paths
+grep -rn "from \"../src/index.ts\"" content/docs | wc -l
+
+# In SaGuSDK: confirm quoted error messages still exist
+grep -rn "is not registered on agent" src
+```

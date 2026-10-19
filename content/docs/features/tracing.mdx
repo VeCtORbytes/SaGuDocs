@@ -1,0 +1,89 @@
+---
+title: Tracing and exporters
+description: Span trees for every run, with secrets redacted, exported to the console or JSON files.
+---
+
+## What it does
+
+Every run records a **trace**: a run ID, a tree of timed **spans**, and total token usage. It's attached to every result as `result.trace` and passed to an optional `traceExporter`.
+
+## What problem it solves
+
+"Why did it take 9 seconds?" "Which tool failed?" "Did the session load?" A trace answers these after the fact, without adding `console.log` everywhere, and with API keys scrubbed.
+
+## Example
+
+```ts
+import { ConsoleExporter, JSONFileExporter } from "../src/index.ts";
+
+// Pretty tree on stdout
+await agent.run("What is 125 * 8?", { traceExporter: new ConsoleExporter() });
+
+// One JSON file per run: ./traces/trace-<runId>.json
+await agent.run("What is 125 * 8?", { traceExporter: new JSONFileExporter({ outputDir: "./traces" }) });
+
+// Or read it directly
+const result = await agent.run("What is 125 * 8?");
+for (const span of result.trace?.spans ?? []) {
+  console.log(span.name, (span.endTime ?? 0) - span.startTime, "ms", span.attributes);
+}
+```
+
+Console output from example 01:
+
+```text
+┌─ [SAGU TRACE] Run ID: 2846f1ed-7778-4822-a675-ce8c7d6fe20f (1ms)
+│  Usage: 51 tokens (25 in / 26 out)
+│  └─ agent_run (1ms) ✔
+│        Attrs: {"agentName":"MathAndWeatherAssistant"}
+│     ├─ model_call (0ms) ✔
+│     │     Attrs: {"agent":"MathAndWeatherAssistant","turn":1,"stopReason":"tool_use","tokens":35}
+│     ├─ tool_execution (0ms) ✔
+│     │     Attrs: {"toolName":"calculate","success":true}
+│     └─ model_call (0ms) ✔
+│           Attrs: {"agent":"MathAndWeatherAssistant","turn":2,"stopReason":"end_turn","tokens":16}
+└─────────────────────────────────────────────────────────
+```
+
+## Spans recorded
+
+| Span | Attributes |
+|---|---|
+| `agent_run` (root) | `agentName`, `sessionId` |
+| `session_load` | `sessionId`, `messageCount` |
+| `input_guardrail` / `output_guardrail` | `pass`, `reason?`, `action?` |
+| `model_call` | `agent`, `turn`, `stopReason`, `tokens` |
+| `handoff` | `fromAgent`, `toAgent`, `hopCount`, `transferred` |
+| `tool_guardrail` | `toolName`, `pass`, `reason?` |
+| `tool_execution` | `toolName`, `success` |
+| `session_save` | `savedCount` |
+
+Failed spans carry `error: { name, message, stack }`.
+
+## Custom exporters
+
+```ts
+import type { TraceExporter } from "../src/index.ts";
+
+const httpExporter: TraceExporter = {
+  async export(trace) {
+    await fetch("https://collector.example.com/traces", { method: "POST", body: JSON.stringify(trace) });
+  },
+};
+```
+
+## How it works internally
+
+`TraceRecorder` (<Source path="src/trace.ts" />) keeps a flat span list with `parentId` links and a stack of open spans: a new span's parent is the innermost open one. `getTrace()` returns the trace passed through `redactSecrets()`, which scrubs common key formats and sensitive environment values ([details](/docs/features/reliability#secret-redaction)). Exporter errors are caught and logged with `console.error`, so they never fail a run.
+
+## Limitations
+
+- **Not OpenTelemetry.** The format is SAGU's own. Write an exporter to forward to OTel or your vendor.
+- **Retries, fallbacks and approvals have no spans**, and graph memory operations show up only as `tool_execution`.
+- **Tool arguments and results are not recorded** in span attributes, only `toolName` and `success`.
+- **Millisecond resolution** (`Date.now()`), so fast spans show `0ms`.
+- **Redaction is heuristic.** Don't rely on it as your only protection against logging secrets.
+
+## Related source
+
+<SourceList paths={["src/trace.ts", "src/reliability.ts", "src/runner.ts", "test/trace.test.ts"]} />

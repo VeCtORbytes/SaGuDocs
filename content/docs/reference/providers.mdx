@@ -1,0 +1,107 @@
+---
+title: Providers
+description: ModelProvider contract, adapter classes, factories and options.
+---
+
+## Contract
+
+```ts
+interface ModelProvider {
+  name: string;
+  generate(request: ProviderRequest): Promise<ProviderResponse>;
+  stream?(request: ProviderRequest): AsyncGenerator<ProviderStreamChunk, ProviderResponse, unknown>;
+}
+
+interface ProviderRequest {
+  messages: ProviderMessage[];
+  systemPrompt?: string;
+  tools?: ToolSpec[];
+  temperature?: number;
+  maxTokens?: number;
+  outputSchema?: Record<string, unknown>;
+  abortSignal?: AbortSignal;
+}
+
+interface ProviderMessage { role: Role; content: string; name?: string; toolCalls?: ToolCall[]; toolResult?: ToolResult; }
+interface ToolSpec { name: string; description: string; parameters: Record<string, unknown>; }
+
+interface ProviderResponse {
+  content?: string;
+  toolCalls?: ToolCall[];
+  stopReason?: "end_turn" | "tool_use" | "max_tokens" | "stop" | string;
+  usage?: TokenUsage;
+}
+
+interface ProviderStreamChunk {
+  type: "text_delta" | "tool_call_delta";
+  text?: string;
+  toolCall?: Partial<ToolCall>;
+}
+```
+
+## Factories and classes
+
+```ts
+function mock(options?: MockProviderOptions | MockTurn[]): MockProvider;
+function anthropic(options?: AnthropicProviderOptions): AnthropicProvider;
+function openai(options?: OpenAIProviderOptions): OpenAIProvider;
+function gemini(options?: GeminiProviderOptions): GeminiProvider;
+function fallbackProvider(primary: ModelProvider, ...fallbacks: ModelProvider[]): FallbackProvider;
+const fallback: typeof fallbackProvider;
+
+new MockProvider(options?: MockProviderOptions | MockTurn[])
+new AnthropicProvider(options?: AnthropicProviderOptions)
+new OpenAIProvider(options?: OpenAIProviderOptions)
+new GeminiProvider(options?: GeminiProviderOptions)
+new FallbackProvider(providers: ModelProvider[], options?: FallbackOptions)
+```
+
+Each adapter exposes `readonly name` and `readonly model` (`name` = `"anthropic:<model>"`, `"openai:<model>"`, `"gemini:<model>"`). `FallbackProvider` exposes `readonly providers`.
+
+## Options
+
+```ts
+interface AnthropicProviderOptions { apiKey?: string; model?: string; baseURL?: string; anthropicVersion?: string; fetch?: typeof fetch; }
+interface OpenAIProviderOptions    { apiKey?: string; model?: string; baseURL?: string; organization?: string;     fetch?: typeof fetch; }
+interface GeminiProviderOptions    { apiKey?: string; model?: string; baseURL?: string;                            fetch?: typeof fetch; }
+interface FallbackOptions { onFallback?: (failedProvider: string, nextProvider: string, error: unknown) => void; }
+```
+
+Defaults and environment variables: [Provider guides](/docs/providers).
+
+## MockProvider
+
+```ts
+type MockTurn =
+  | string
+  | { content?: string; toolCalls?: ToolCall[]; stopReason?: string; usage?: { promptTokens: number; completionTokens: number; totalTokens: number } }
+  | { error: Error | string; statusCode?: number; isTransient?: boolean }
+  | MockTurnHandler;
+
+type MockTurnHandler = (request: ProviderRequest) => ProviderResponse | Promise<ProviderResponse>;
+
+interface MockProviderOptions {
+  name?: string;                                 // default "mock"
+  script?: MockTurn[];
+  defaultResponse?: string | MockTurnHandler;    // default "Mock response"
+  latencyMs?: number;                            // default 0
+}
+
+class MockProvider implements ModelProvider {
+  get requests(): ProviderRequest[];
+  get lastRequest(): ProviderRequest | undefined;
+  enqueueTurn(...turns: MockTurn[]): this;
+  setScript(turns: MockTurn[]): this;
+  reset(): void;
+}
+```
+
+## `zodToJsonSchema`
+
+```ts
+function zodToJsonSchema(schema: z.ZodTypeAny): Record<string, unknown>;
+```
+
+SAGU's own Zod 3 → JSON Schema converter used for tool parameters and `outputSchema`. Coverage is listed under [Tools → Limitations](/docs/features/tools#limitations-and-common-mistakes).
+
+<SourceList paths={["src/types.ts", "src/providers/mock.ts", "src/providers/anthropic.ts", "src/providers/openai.ts", "src/providers/gemini.ts", "src/providers/fallback.ts", "src/providers/schema.ts"]} />

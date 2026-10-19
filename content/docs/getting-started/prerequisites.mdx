@@ -1,0 +1,43 @@
+---
+title: Prerequisites
+description: The Node.js version and tools you need before running SAGU.
+---
+
+## Node.js
+
+SAGU's source is TypeScript that Node.js runs **directly**, without a compile step. That relies on two newer Node.js features:
+
+| Feature | Used for | Available unflagged since |
+|---|---|---|
+| Native TypeScript type stripping | Running `.ts` files with `node file.ts` | Node.js 23.6 (also 22.18) |
+| `node:sqlite` | `SqliteSession` | Node.js 23.4 (also 22.13) |
+
+<Callout type="warn" title="Verified version">
+  The test suite and all four examples were verified on **Node.js 25.8**. The versions in the table come from the
+  Node.js release notes and have not been tested against SAGU. `package.json` declares no `engines` field, and the
+  README's "node ≥ 22.0.0" badge is lower than what type stripping needs. When in doubt, use Node.js 25.
+</Callout>
+
+Check your version:
+
+```bash
+node --version
+```
+
+If you use a version manager:
+
+```bash
+nvm install 25
+nvm use 25
+```
+
+## Other tools
+
+- **git**, to clone the repository.
+- **npm** (bundled with Node.js), to install `zod` and the dev dependencies.
+- **Optional:** a running **Neo4j** instance, only if you want persistent graph memory. See [Neo4j graph memory](/docs/memory/graph#neo4jgraphmemorystore).
+- **Optional:** an API key for **Anthropic**, **OpenAI** or **Google Gemini**, only if you want to call a real model. Every example runs without one.
+
+## Knowledge assumed
+
+You should be comfortable with TypeScript, `async`/`await` and ES modules. You do not need any prior experience with LLM agents; [Learn the fundamentals](/docs/learn) covers the concepts.

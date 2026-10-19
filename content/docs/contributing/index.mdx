@@ -1,0 +1,63 @@
+---
+title: Contributing
+description: Run the tests, typecheck, and send changes.
+---
+
+## Setup
+
+```bash
+git clone https://github.com/VeCtORbytes/SaGuSDK.git
+cd SaGuSDK
+npm install
+```
+
+Use a Node.js version with native TypeScript support. Verified: Node.js 25.8. See [Prerequisites](/docs/getting-started/prerequisites).
+
+## Tests
+
+```bash
+npm test
+```
+
+This runs `node --test test/**/*.test.ts` with Node's built-in runner and `node:assert`. There is no Jest or Vitest, and no network: providers are tested with `mock()` or a stubbed `fetch`. Currently **73 tests**, all passing, across 13 files:
+
+`agent`, `errors`, `events`, `guardrails`, `handoff`, `memory`, `mock_provider`, `providers`, `reliability`, `schema`, `structured_output`, `tool`, `trace`.
+
+Run one file:
+
+```bash
+node --test test/handoff.test.ts
+```
+
+## Typecheck
+
+```bash
+npm run typecheck   # tsc --noEmit
+```
+
+`tsconfig.json` is strict (`strict`, `noUncheckedIndexedAccess`, `noUnusedLocals`, `noImplicitOverride`, …) and covers `src/`, `test/` and `examples/`.
+
+## Making a change
+
+1. Branch from `main`.
+2. Keep the runtime readable. The core loop in `src/runner.ts` is meant to be understood in one sitting.
+3. Add or update a test in `test/` next to the area you touched.
+4. Run `npm test` and `npm run typecheck`.
+5. If you change public behaviour, update the docs. See [Keeping docs in sync](/docs/contributing/docs-sync).
+6. Open a pull request on [GitHub](https://github.com/VeCtORbytes/SaGuSDK).
+
+## Working on this documentation site
+
+The site lives in its own repository, [VeCtORbytes/SaGuDocs](https://github.com/VeCtORbytes/SaGuDocs), separate from the SDK and its dependencies.
+
+```bash
+git clone https://github.com/VeCtORbytes/SaGuDocs.git
+cd SaGuDocs
+npm install
+npm run dev          # http://localhost:3000
+npm run build        # static export to out/
+npm run types:check  # next typegen && tsc --noEmit
+npm run lint
+```
+
+Pages are MDX files in `content/docs/`; sidebar order is set by each folder's `meta.json`.

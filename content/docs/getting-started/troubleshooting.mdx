@@ -1,0 +1,61 @@
+---
+title: Troubleshooting
+description: Common setup and runtime problems and how to fix them.
+---
+
+## `SyntaxError` or `ERR_UNKNOWN_FILE_EXTENSION` when running a `.ts` file
+
+Your Node.js version cannot strip TypeScript types natively. Upgrade. SAGU is verified on Node.js 25.8. See [Prerequisites](/docs/getting-started/prerequisites).
+
+## `ERR_UNKNOWN_BUILTIN_MODULE: node:sqlite`
+
+Your Node.js predates the unflagged `node:sqlite` module. Upgrade Node.js, or use `InMemorySession` / `FileSession` instead of `SqliteSession`.
+
+## `Cannot find module 'sagu-sdk'`
+
+SAGU is not published to npm. Import from the source entry by relative path, for example `"../src/index.ts"`. See [Installation](/docs/getting-started/installation#where-to-put-your-own-code).
+
+## `ConfigurationError` thrown at startup
+
+Constructors validate configuration **synchronously** and throw. These are programmer errors, not runtime outcomes:
+
+| Message contains | Fix |
+|---|---|
+| `Agent must have a valid non-empty 'name'` | Give the agent a `name` |
+| `must have 'instructions' defined` | Add `instructions` (string or function) |
+| `must have a valid 'model' implementing ModelProvider` | Pass an object with a `generate()` method |
+| `Tool name '…' contains invalid characters` | Tool names allow only letters, digits, `_` and `-` |
+| `must specify an 'input' schema (Zod schema)` | Add `input: z.object({...})` to `defineTool` |
+| `FallbackProvider requires at least one provider` | Pass at least one provider |
+
+## `result.success` is `false` with `SAGU_CONFIG_ERROR`
+
+Common causes:
+
+- **Missing API key.** The message names the variable to set.
+- **Run aborted.** If you pass `signal` and abort it, the run fails with message `Run aborted by signal`, which currently uses the `SAGU_CONFIG_ERROR` code.
+
+## `SAGU_MAX_TURNS_EXCEEDED`
+
+The model kept calling tools for `maxTurns` turns (default 10) without producing a final answer. Inspect `result.messages` to see the tool calls; common causes are a tool that keeps returning errors, or instructions that never tell the model when to stop. Schema repair retries also count as turns.
+
+## A tool "fails" but the run still succeeds
+
+This is by design. Unknown tool names, invalid JSON arguments, Zod validation failures, tool guardrail blocks, denied approvals, thrown errors and tool timeouts are all sent back to the model as a `tool` message with `isError: true`, so the model can recover. Watch `tool_end` events with `isError: true`, or inspect the trace.
+
+## A tool with `requiresApproval` never runs
+
+If you don't pass `onApprovalRequired` in the run options, approval is **denied by default**. See [Tool approval](/docs/features/tool-approval).
+
+## Session history is not saved
+
+Messages are appended to the `SessionStore` only when the run **succeeds**, and only if you pass **both** `sessionId` and `sessionStore`. Failed runs leave the session unchanged.
+
+## `MemoryError` from `Neo4jGraphMemoryStore`
+
+- `Failed to initialize neo4j driver` → run `npm install neo4j-driver`.
+- Authentication errors → set `NEO4J_USER` and `NEO4J_PASSWORD` in the environment. The constructor's `username`/`password` options are currently ignored.
+
+## Streaming prints the whole answer at once
+
+The Anthropic, OpenAI and Gemini adapters implement `stream()` by calling `generate()` and emitting the full text as one `text_delta`. Only `MockProvider` chunks text word by word. See [Streaming](/docs/features/streaming#limitations).

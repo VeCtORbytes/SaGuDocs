@@ -1,0 +1,83 @@
+---
+title: Agent and runner
+description: Agent, AgentConfig, RunOptions, RunResult, runAgent and streamAgent.
+---
+
+## `class Agent<TOutput = string>`
+
+```ts
+new Agent<TOutput>(config: AgentConfig<TOutput>)
+agent.run(input: string, options?: RunOptions): Promise<RunResult<TOutput>>
+agent.stream(input: string, options?: RunOptions): AsyncGenerator<AgentEvent<TOutput>, void, unknown>
+```
+
+The constructor throws `ConfigurationError` if `name` is empty, `instructions` is falsy, or `model` has no `generate` function. All config is copied into `readonly` fields, and the `tools`, `handoffs` and guardrail arrays are frozen.
+
+### `AgentConfig<TOutput>`
+
+<TypeTable
+  type={{
+    name: { type: 'string', description: 'Non-empty; trimmed. Used in traces and handoff tool names.', required: true },
+    instructions: { type: 'string | ((context: RunContext) => string | Promise<string>)', description: 'System prompt, or a function evaluated every turn.', required: true },
+    model: { type: 'ModelProvider', description: 'Any object implementing ModelProvider.', required: true },
+    tools: { type: 'Tool[]', default: '[]' },
+    outputSchema: { type: 'z.ZodType<TOutput>', description: 'Enables structured output and repair.' },
+    inputGuardrails: { type: 'InputGuardrail[]', default: '[]' },
+    outputGuardrails: { type: 'OutputGuardrail[]', default: '[]' },
+    toolGuardrails: { type: 'ToolGuardrail[]', default: '[]' },
+    handoffs: { type: 'any[] (Agent instances)', default: '[]' },
+    maxTurns: { type: 'number', default: '10' },
+    maxHandoffs: { type: 'number', default: '5' },
+    maxRepairAttempts: { type: 'number', default: '2' },
+    temperature: { type: 'number', description: 'Forwarded to the provider when set.' },
+  }}
+/>
+
+`maxTurns`, `maxHandoffs` and `maxRepairAttempts` are read from the agent that **starts** the run. Handoff targets' values are ignored.
+
+### `RunContext`
+
+Passed to function `instructions`:
+
+```ts
+interface RunContext {
+  runId: string;
+  agentName: string;
+  sessionId?: string;
+  turn: number;
+}
+```
+
+## `RunOptions`
+
+<TypeTable
+  type={{
+    sessionId: { type: 'string', description: 'Session key. Needs sessionStore too.' },
+    sessionStore: { type: 'SessionStore', description: 'History is loaded before the run and appended after a successful run.' },
+    maxTurns: { type: 'number', description: 'Overrides the agent value.' },
+    maxHandoffs: { type: 'number', description: 'Overrides the agent value.' },
+    signal: { type: 'AbortSignal', description: 'Checked at the start of each turn; forwarded to providers, tools (context.abortSignal) and tool timeouts.' },
+    onApprovalRequired: { type: '(toolCall: ToolCall) => boolean | Promise<boolean>', description: 'Approves requiresApproval tools. Absent means denied.' },
+    traceExporter: { type: 'TraceExporter', description: 'Receives the trace when the run ends.' },
+    initialMessages: { type: 'Message[]', description: 'Appended after session history, before the user input.' },
+  }}
+/>
+
+## `RunResult<TOutput>`
+
+```ts
+type RunResult<TOutput = string> =
+  | { success: true;  output: TOutput;  messages: Message[]; usage: TokenUsage; agentName: string; turns: number; trace?: Trace }
+  | { success: false; error: SaguError; messages: Message[]; usage: TokenUsage; agentName: string; turns: number; trace?: Trace };
+```
+
+## Functions
+
+```ts
+function runAgent<TOutput = string>(agent: Agent<TOutput>, input: string, options?: RunOptions): Promise<RunResult<TOutput>>;
+function streamAgent<TOutput = string>(agent: Agent<TOutput>, input: string, options?: RunOptions): AsyncGenerator<AgentEvent<TOutput>, void, unknown>;
+```
+
+`agent.run` and `agent.stream` delegate to these. `runAgent` throws a `SaguError` only if the stream ends without a terminal event, which should not happen.
+
+<SourceList paths={["src/agent.ts", "src/runner.ts", "src/types.ts"]} />

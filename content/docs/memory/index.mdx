@@ -1,0 +1,39 @@
+---
+title: Memory guides
+description: Choosing between session stores and graph memory stores.
+---
+
+SAGU has two separate memory systems. They solve different problems and are configured differently.
+
+<MemoryDiagram />
+
+## Conversation history vs. graph facts
+
+| | Session history | Graph memory |
+|---|---|---|
+| Interface | `SessionStore` | `GraphMemoryStore` |
+| Stores | Ordered `Message[]` per `sessionId` | `{ subject, predicate, object }` triplets |
+| Scope | One conversation | Any agent holding the same store |
+| Wired via | `RunOptions.sessionId` + `sessionStore` | `tools: createGraphMemoryTools(store)` |
+| Read | Automatically, before every run | When the model calls `recall_facts` |
+| Write | Automatically, after every **successful** run | When the model calls `remember_fact` |
+| Good for | "Continue our chat" | "Remember I prefer TypeScript" |
+
+You can use both at once on the same agent.
+
+## Choosing a store
+
+| Store | Survives restart? | Setup | Use when |
+|---|---|---|---|
+| `InMemorySession` | No | None | Tests, demos, single-process prototypes |
+| `FileSession` | Yes (JSON files) | Writable directory | Local tools and CLIs, low concurrency |
+| `SqliteSession` | With a `filename`; default `:memory:` doesn't | Node.js with `node:sqlite` | Single-host apps wanting one durable file |
+| `InMemoryGraphMemoryStore` | No | None | Tests and demos of graph memory |
+| `Neo4jGraphMemoryStore` | Yes | Neo4j server + `neo4j-driver` | Facts that must persist and be queryable |
+
+Need Redis, Postgres or something else? Implement the three-method `SessionStore` or `GraphMemoryStore` interface. Both are exported as types.
+
+<Cards>
+  <Card title="Session stores" href="/docs/memory/sessions" description="InMemorySession, FileSession, SqliteSession in detail." />
+  <Card title="Graph memory stores" href="/docs/memory/graph" description="In-memory and Neo4j, including setup and the data model." />
+</Cards>

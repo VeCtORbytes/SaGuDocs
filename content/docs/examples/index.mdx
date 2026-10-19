@@ -1,0 +1,32 @@
+---
+title: Examples
+description: Four runnable examples from the repository, all offline with the scripted mock model.
+---
+
+Each example is a single `index.ts` in <Source path="examples" />. They use `mock()` so they run without API keys:
+
+```bash
+node examples/01-basic-tool-agent/index.ts
+```
+
+<Cards>
+  <Card title="01 · Basic tool agent" href="/docs/examples/basic-tool-agent" description="defineTool, Agent, run(), ConsoleExporter trace." />
+  <Card title="02 · Support triage handoff" href="/docs/examples/support-triage-handoff" description="Three agents, handoff routing, stream() events." />
+  <Card title="03 · Structured output & memory" href="/docs/examples/structured-output-and-memory" description="Agent<LeadProfile>, schema repair, SqliteSession." />
+  <Card title="04 · Graph memory recall" href="/docs/examples/graph-memory-longterm-recall" description="remember_fact / recall_facts across agents." />
+</Cards>
+
+## Feature coverage
+
+| Feature | 01 | 02 | 03 | 04 |
+|---|:-:|:-:|:-:|:-:|
+| Tools (`defineTool`) | ✓ | ✓ | | ✓ (generated) |
+| `agent.run()` | ✓ | | ✓ | ✓ |
+| `agent.stream()` | | ✓ | | |
+| Handoffs | | ✓ | | |
+| Structured output + repair | | | ✓ | |
+| Session store | | | ✓ (`SqliteSession`) | |
+| Graph memory | | | | ✓ |
+| Tracing exporter | ✓ | | | |
+
+Not covered by an example: guardrails, tool approval, fallback, real providers. See the [feature pages](/docs/features/guardrails) for snippets.

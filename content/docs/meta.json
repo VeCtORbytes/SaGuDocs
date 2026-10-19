@@ -1,0 +1,19 @@
+{
+  "title": "SAGU",
+  "pages": [
+    "index",
+    "---Getting started---",
+    "...getting-started",
+    "---Learn the fundamentals---",
+    "...learn",
+    "---Core features---",
+    "...features",
+    "---Guides---",
+    "providers",
+    "memory",
+    "examples",
+    "---Reference---",
+    "reference",
+    "contributing"
+  ]
+}

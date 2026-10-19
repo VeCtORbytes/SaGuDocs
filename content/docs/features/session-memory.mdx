@@ -1,0 +1,77 @@
+---
+title: Session memory
+description: Keep multi-turn conversation history across separate runs.
+---
+
+## What it does
+
+A `SessionStore` saves the messages of each successful run under a `sessionId` and loads them before the next run with the same id. The model then sees the earlier conversation.
+
+## What problem it solves
+
+Each `agent.run()` is stateless. Without a store, the second message of a chat ("…and in Fahrenheit?") reaches the model with no context.
+
+## When to use it
+
+Chatbots, multi-step assistants, anything where a user sends more than one message. For facts that should outlive a conversation, see [Graph memory](/docs/features/graph-memory).
+
+## Example
+
+```ts
+import { Agent, SqliteSession, anthropic } from "../src/index.ts";
+
+const sessionStore = new SqliteSession({ filename: "./sessions.db" });
+
+const agent = new Agent({
+  name: "Assistant",
+  instructions: "Be concise.",
+  model: anthropic(),
+});
+
+const opts = { sessionId: "user-42", sessionStore };
+
+await agent.run("My name is Ana.", opts);
+const second = await agent.run("What's my name?", opts);
+// second.messages starts with the first run's user and assistant messages.
+
+sessionStore.close();
+```
+
+## The three stores
+
+| Store | Persistence | Options |
+|---|---|---|
+| `InMemorySession` | Process lifetime | `maxMessagesPerSession` keeps only the newest N |
+| `FileSession` | JSON file per session | `storageDir` (default `./.sagu_sessions`) |
+| `SqliteSession` | SQLite via built-in `node:sqlite` | `filename` (default `:memory:`, which is **not** persistent) |
+
+All three implement:
+
+```ts
+interface SessionStore {
+  getHistory(sessionId: string): Promise<Message[]>;
+  appendMessages(sessionId: string, messages: Message[]): Promise<void>;
+  clear(sessionId: string): Promise<void>;
+}
+```
+
+Implement this interface to back sessions with Redis, Postgres or anything else. Details per store: [Session stores guide](/docs/memory/sessions).
+
+## How it works internally
+
+1. At run start, if **both** `sessionId` and `sessionStore` are set, the runner calls `getHistory()` (span `session_load`) and puts those messages first.
+2. On `run_completed`, it calls `appendMessages()` with everything from this run's user message onward (span `session_save`).
+3. Store failures throw `MemoryError`, which the runner catches and returns as `run_failed`.
+
+## Limitations and common mistakes
+
+- **Saved only on success.** A failed or aborted run leaves no trace in the session.
+- **No automatic truncation or summarization**, except `InMemorySession`'s `maxMessagesPerSession`. Long sessions grow the prompt every turn.
+- **`SqliteSession` defaults to `:memory:`.** Pass a `filename` to persist.
+- **`FileSession` rewrites the whole file** on each append, with no locking. Concurrent writers to one session can lose messages.
+- **`FileSession` sanitizes IDs** (`[^a-zA-Z0-9_-]` becomes `_`), so `a.b` and `a_b` share a file.
+- **Pruning by message count can split a tool call from its result**, which some vendors reject.
+
+## Related source
+
+<SourceList paths={["src/memory/types.ts", "src/memory/inMemory.ts", "src/memory/file.ts", "src/memory/sqlite.ts", "test/memory.test.ts"]} />

@@ -1,0 +1,30 @@
+---
+title: Reliability
+description: withRetry, withTimeout, isTransientError, redactSecrets.
+---
+
+```ts
+interface RetryOptions {
+  maxRetries?: number;       // default 3
+  initialDelayMs?: number;   // default 200
+  maxDelayMs?: number;       // default 4000
+  backoffFactor?: number;    // default 2
+  shouldRetry?: (error: unknown, attempt: number) => boolean;           // default isTransientError
+  onRetry?: (error: unknown, attempt: number, delayMs: number) => void;
+}
+
+function withRetry<T>(fn: () => Promise<T>, options?: RetryOptions): Promise<T>;
+
+function isTransientError(error: unknown): boolean;
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, operationName: string, signal?: AbortSignal): Promise<T>;
+// timeoutMs <= 0 → returns the promise unchanged
+// rejects with TimeoutError(operationName, timeoutMs), or TimeoutError(`${operationName} (aborted)`) on abort
+
+function redactSecrets(value: unknown, customPatterns?: RegExp[]): unknown;
+// customPatterns replaces (does not extend) the default patterns
+```
+
+Behaviour and caveats: [Retry, timeout and secret redaction](/docs/features/reliability).
+
+<SourceList paths={["src/reliability.ts", "test/reliability.test.ts"]} />

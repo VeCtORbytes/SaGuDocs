@@ -1,0 +1,29 @@
+---
+title: What problem does an agent runtime solve?
+description: Why you don't just call the model API in a while loop yourself, and what SAGU handles for you.
+---
+
+You *can* write an agent with a raw vendor SDK and a `while` loop. The first version is short. Then you need to handle the cases below, and the loop grows.
+
+| Problem | What you'd write by hand | What SAGU does |
+|---|---|---|
+| Vendor wire formats differ | Separate message/tool translation for each API | One `ModelProvider` interface, with adapters per vendor |
+| Model sends malformed tool arguments | JSON parsing plus validation plus an error reply | Parses JSON, validates with your Zod schema, and sends errors back to the model |
+| Model calls a tool that doesn't exist | A lookup and an error path | Returns `Tool '…' is not registered` to the model |
+| A tool throws or hangs | try/catch and a timeout | Catches errors, applies `timeoutMs`, and reports `isError: true` |
+| Model loops forever | A turn counter | `maxTurns`, ending in `MaxTurnsExceededError` |
+| Dangerous actions | Ad-hoc checks | Tool guardrails and `requiresApproval` |
+| You need typed JSON back | Prompting, parsing, retrying | `outputSchema` with repair prompts, giving `Agent<T>` |
+| Several specialist agents | A routing layer | `handoffs` with a `maxHandoffs` cap |
+| Debugging "what did it do?" | Logging everywhere | Event stream and span trace with secret redaction |
+| Remembering past conversations | Your own storage | `SessionStore` adapters |
+
+## SAGU's design choices
+
+**One loop.** `agent.run()` is implemented by consuming `agent.stream()`. There is one execution path to read and test: <Source path="src/runner.ts" />.
+
+**Return, don't throw.** Expected runtime outcomes come back as `{ success: false, error }`, so callers branch on a boolean instead of wrapping every run in try/catch. Programmer mistakes, like a missing agent name, still throw at construction time.
+
+**Explicit over implicit.** Graph memory is reached through tools you add, history is saved only when you pass a store, and approval is denied unless you supply a handler.
+
+Next: [How the SAGU agent loop works](/docs/learn/agent-loop)
