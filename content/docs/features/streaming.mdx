@@ -14,7 +14,7 @@ Long runs feel frozen without feedback, and debugging needs to know *when* each 
 ## Example
 
 ```ts
-import { isTextDelta, isToolStart, isToolEnd } from "../src/index.ts";
+import { isTextDelta, isToolStart, isToolEnd } from "sagu-sdk";
 
 for await (const event of agent.stream("What is 125 * 8?")) {
   if (isTextDelta(event)) process.stdout.write(event.text);

@@ -14,7 +14,7 @@ These docs live in the [SaGuDocs](https://github.com/VeCtORbytes/SaGuDocs) repos
 - [ ] **New event type or span name?** Update [Streaming](/docs/features/streaming) and [Tracing](/docs/features/tracing).
 - [ ] **Changed an example?** Re-run it and update its walkthrough page and expected output.
 - [ ] **Fixed something on the [Known limitations](/docs/contributing/limitations) list?** Remove it there and in the linked feature page's Limitations section.
-- [ ] **Published to npm?** Rewrite [Installation](/docs/getting-started/installation), change every `"../src/index.ts"` import to the package name, and update the hero badge in `app/(home)/page.tsx`.
+- [ ] **Published a new version?** Update the version badge in `app/(home)/page.tsx`, and check the `engines` / peer dependency notes on [Installation](/docs/getting-started/installation) and [Prerequisites](/docs/getting-started/prerequisites).
 - [ ] Run `npm test` in SaGuSDK and `npm run build` in SaGuDocs before merging.
 
 ## Useful commands
@@ -23,7 +23,7 @@ These docs live in the [SaGuDocs](https://github.com/VeCtORbytes/SaGuDocs) repos
 # In SaGuSDK: all exports, to diff against the reference table
 grep -E "^export" src/index.ts
 
-# In SaGuDocs: every snippet's import line, to catch stale paths
+# In SaGuDocs: every snippet imports the package (should be 0)
 grep -rn "from \"../src/index.ts\"" content/docs | wc -l
 
 # In SaGuSDK: confirm quoted error messages still exist

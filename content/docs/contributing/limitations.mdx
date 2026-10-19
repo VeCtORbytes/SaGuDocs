@@ -7,10 +7,9 @@ This list was compiled from the source code at the time these docs were written.
 
 ## Distribution and runtime
 
-- **Not on npm.** `sagu-sdk` returns 404 on the registry. ([Installation](/docs/getting-started/installation))
-- **`npm run build` emits nothing.** `tsconfig.json` has `noEmit: true`, so `dist/` (the `main`/`types` target) is never created. Source files also import with `.ts` extensions, which a publishable build would need to rewrite.
-- **Node.js version is undeclared.** There is no `engines` field. Verified on Node.js 25.8 only. ([Prerequisites](/docs/getting-started/prerequisites))
-- **Zod 3 only** for JSON Schema conversion. ([Tools](/docs/features/tools#limitations-and-common-mistakes))
+- **ESM only.** No CommonJS build, so `require("sagu-sdk")` doesn't work.
+- **Node.js 22.13+.** Not tested in browsers, Deno or Bun.
+- **Zod 3 only**, as a peer dependency. Zod 4 is rejected with a clear error. ([Installation](/docs/getting-started/installation#why-zod3))
 
 ## Providers
 

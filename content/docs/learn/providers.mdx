@@ -49,7 +49,7 @@ Only the OpenAI adapter forwards `outputSchema` to the vendor (as `response_form
 Any object with a `name` and a `generate()` method works:
 
 ```ts
-import type { ModelProvider } from "../src/index.ts";
+import type { ModelProvider } from "sagu-sdk";
 
 const echo: ModelProvider = {
   name: "echo",

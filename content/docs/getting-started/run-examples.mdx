@@ -3,7 +3,13 @@ title: Run the examples
 description: Run the five bundled examples. They work offline with the scripted mock model.
 ---
 
-All five examples live in <Source path="examples" /> and use `mock()`, so they need no API keys or network. Run them from the repository root:
+All five examples live in <Source path="examples" /> and use `mock()`, so they need no API keys or network. They import the SDK from source, so run them from a clone of the repository:
+
+```bash
+git clone https://github.com/VeCtORbytes/SaGuSDK.git && cd SaGuSDK && npm install
+```
+
+Then:
 
 ```bash
 node examples/01-basic-tool-agent/index.ts
@@ -47,4 +53,4 @@ Message History Count: 4
 
 ## Running an example against a real model
 
-The examples script their model turns with `mock([...])`. To try one with a real provider, copy it into `playground/`, change the import to `"../src/index.ts"`, and replace `mock([...])` with `anthropic()`, `openai()` or `gemini()`. Real models choose their own tool calls, so output varies.
+The examples script their model turns with `mock([...])`. To try one in your own project, copy it, change the import to `"sagu-sdk"`, and replace `mock([...])` with `anthropic()`, `openai()` or `gemini()`. Real models choose their own tool calls, so output varies.

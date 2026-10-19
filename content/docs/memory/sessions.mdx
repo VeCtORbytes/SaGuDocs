@@ -12,7 +12,7 @@ await agent.run(input, { sessionId: "user-42", sessionStore: store });
 ## InMemorySession
 
 ```ts
-import { InMemorySession } from "../src/index.ts";
+import { InMemorySession } from "sagu-sdk";
 
 const store = new InMemorySession({ maxMessagesPerSession: 50 });
 await store.clearAll(); // extra method: wipe every session
@@ -25,7 +25,7 @@ await store.clearAll(); // extra method: wipe every session
 ## FileSession
 
 ```ts
-import { FileSession } from "../src/index.ts";
+import { FileSession } from "sagu-sdk";
 
 const store = new FileSession({ storageDir: "./.sagu_sessions" }); // default directory
 ```
@@ -39,7 +39,7 @@ const store = new FileSession({ storageDir: "./.sagu_sessions" }); // default di
 ## SqliteSession
 
 ```ts
-import { SqliteSession } from "../src/index.ts";
+import { SqliteSession } from "sagu-sdk";
 
 const store = new SqliteSession({ filename: "./sessions.db" }); // default ":memory:"
 // …
@@ -71,7 +71,7 @@ CREATE INDEX IF NOT EXISTS idx_sagu_messages_session ON sagu_messages(session_id
 ## Writing your own
 
 ```ts
-import type { Message, SessionStore } from "../src/index.ts";
+import type { Message, SessionStore } from "sagu-sdk";
 
 class RedisSession implements SessionStore {
   constructor(private redis: { lrange(k: string, a: number, b: number): Promise<string[]>; rpush(k: string, ...v: string[]): Promise<number>; del(k: string): Promise<number> }) {}

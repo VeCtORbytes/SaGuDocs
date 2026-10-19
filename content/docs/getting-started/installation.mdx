@@ -1,82 +1,78 @@
 ---
 title: Installation
-description: Clone the repository and install dependencies. Why there is no npm install yet.
+description: Install sagu-sdk and Zod 3 from npm.
 ---
-
-## Current distribution status
-
-<Callout type="warn" title="npm install sagu-sdk does not work yet">
-  The package is named `sagu-sdk` in `package.json`, but it is **not published** to the npm registry (the registry
-  returns 404). Also, `npm run build` runs `tsc` with `noEmit: true`, so no `dist/` folder is produced, even though
-  `main` and `types` point at `dist/`. Until both are fixed, run SAGU from a clone of the repository.
-</Callout>
-
-## Clone and install
 
 <Steps>
 <Step>
 
-### Clone the repository
+### Create a project (or use an existing one)
 
 ```bash
-git clone https://github.com/VeCtORbytes/SaGuSDK.git
-cd SaGuSDK
+mkdir my-agent && cd my-agent
+npm init -y
+npm pkg set type=module
 ```
+
+SAGU is an ES module package; `"type": "module"` lets you use `import` and top-level `await` in `.js` and `.ts` files.
 
 </Step>
 <Step>
 
-### Install dependencies
+### Install
 
 ```bash
-npm install
+npm install sagu-sdk zod@3
 ```
 
-This installs `zod` (runtime), `typescript` and `@types/node` (dev), and tries to install `neo4j-driver` as an **optional** dependency. If the Neo4j driver fails to install, everything except `Neo4jGraphMemoryStore` still works.
+[sagu-sdk on npm](https://www.npmjs.com/package/sagu-sdk). It includes TypeScript types; no `@types` package is needed.
 
 </Step>
 <Step>
 
-### Verify the setup
+### Check it loads
 
 ```bash
-npm test          # 88 tests via node --test, no network or API keys
-npm run typecheck # tsc --noEmit over src, test and examples
+node -e "import('sagu-sdk').then(m => console.log('SAGU ready:', typeof m.Agent))"
+# SAGU ready: function
 ```
 
 </Step>
 </Steps>
 
-## Where to put your own code
+## Why `zod@3`
 
-Because SAGU is not an installable package yet, you import it by **relative path** to `src/index.ts`. The simplest layout is a folder inside the clone:
+You write tool and output schemas with Zod, so Zod is a **peer dependency**: your project and SAGU share one copy. SAGU reads Zod 3 internals to build the JSON Schema it sends to models.
 
-```text
-SaGuSDK/
-├── src/            ← the SDK
-├── examples/
-└── playground/     ← your files
-    └── hello.ts    → import { Agent } from "../src/index.ts";
-```
-
-<Callout title="Import path used in these docs">
-  Every snippet in this documentation imports from `"../src/index.ts"`, assuming your file sits one folder below the
-  repository root (like `playground/hello.ts`). The repository's `package.json` sets `"type": "module"`, so these
-  files run as ES modules and top-level `await` works.
-</Callout>
-
-Run any file with plain Node.js:
-
-```bash
-node playground/hello.ts
-```
+- `npm install sagu-sdk` on its own installs Zod 3 automatically (npm 7+).
+- If your project already uses **Zod 4**, npm stops with `ERESOLVE … peer zod@"^3"`. Use Zod 3 in this project.
+- Passing a Zod 4 schema anyway throws `ConfigurationError: … requires Zod 3. Install it with: npm install zod@3`.
 
 ## Optional: Neo4j driver
 
-`neo4j-driver` is listed under `optionalDependencies` and loaded with a dynamic `import()` only when a `Neo4jGraphMemoryStore` first connects. If it is missing, that store fails with a `MemoryError` that says to install it:
+`neo4j-driver` is an **optional** dependency, loaded only when a `Neo4jGraphMemoryStore` first connects. If it's missing, that store fails with a `MemoryError` telling you to install it:
 
 ```bash
 npm install neo4j-driver
 ```
+
+## Running TypeScript
+
+The package is compiled JavaScript, so it works with any setup: `tsc`, `tsx`, a bundler, or Node.js running `.ts` files directly (Node.js 22.18+ / 23.6+). The snippets in these docs are TypeScript files run with `node file.ts`.
+
+For `tsconfig.json`, `"module": "NodeNext"` and `"moduleResolution": "NodeNext"` match the package. Consumer typechecking was verified with TypeScript 5.0, 5.4 and 5.9.
+
+## Working from source
+
+To run the bundled examples or contribute, clone the repository instead:
+
+```bash
+git clone https://github.com/VeCtORbytes/SaGuSDK.git
+cd SaGuSDK
+npm install
+npm test          # 89 tests via node --test (1 skipped without Neo4j), no network or API keys
+```
+
+The examples import from `../../src/index.ts`, so they run directly from the clone. See [Run the examples](/docs/getting-started/run-examples).
 
 Next: [Quickstart](/docs/getting-started/quickstart).

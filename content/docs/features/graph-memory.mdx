@@ -21,7 +21,7 @@ Session history is long, linear and tied to one conversation. Facts are compact 
 ## Automatic mode
 
 ```ts
-import { Agent, LongTermMemory, InMemoryGraphMemoryStore, anthropic } from "../src/index.ts";
+import { Agent, LongTermMemory, InMemoryGraphMemoryStore, anthropic } from "sagu-sdk";
 
 const memory = new LongTermMemory({ store: new InMemoryGraphMemoryStore(), model: anthropic() });
 memory.start();
@@ -48,7 +48,7 @@ How extraction, inference and maintenance work: [Background graph processes](/do
 From <Source path="examples/04-graph-memory-longterm-recall/index.ts" />:
 
 ```ts
-import { Agent, InMemoryGraphMemoryStore, createGraphMemoryTools, anthropic } from "../src/index.ts";
+import { Agent, InMemoryGraphMemoryStore, createGraphMemoryTools, anthropic } from "sagu-sdk";
 
 const graphStore = new InMemoryGraphMemoryStore();
 const graphTools = createGraphMemoryTools(graphStore);

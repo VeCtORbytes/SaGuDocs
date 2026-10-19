@@ -5,7 +5,7 @@ description: Build and run a tool-using agent in about five minutes. No API key 
 
 This builds the smallest complete agent: one tool, one scripted model, one run. It works offline, so you can see the whole loop before you add credentials.
 
-<Callout>Complete [Installation](/docs/getting-started/installation) first. You should be inside your clone of `SaGuSDK`.</Callout>
+<Callout>Complete [Installation](/docs/getting-started/installation) first: a project with `"type": "module"` and `sagu-sdk` + `zod@3` installed.</Callout>
 
 <Steps>
 <Step>
@@ -13,8 +13,7 @@ This builds the smallest complete agent: one tool, one scripted model, one run. 
 ### Create a file
 
 ```bash
-mkdir -p playground
-touch playground/hello.ts
+touch hello.ts
 ```
 
 </Step>
@@ -22,9 +21,9 @@ touch playground/hello.ts
 
 ### Write the agent
 
-```ts title="playground/hello.ts"
+```ts title="hello.ts"
 import { z } from "zod";
-import { Agent, defineTool, mock } from "../src/index.ts";
+import { Agent, defineTool, mock } from "sagu-sdk";
 
 // 1. A tool: name, description, Zod input schema, execute function.
 const getTime = defineTool({
@@ -70,8 +69,10 @@ if (result.success) {
 ### Run it
 
 ```bash
-node playground/hello.ts
+node hello.ts
 ```
+
+This needs Node.js 22.18+ / 23.6+ to run `.ts` directly. On older versions, use `npx tsx hello.ts`.
 
 ```text title="Output (time will differ)"
 output: I looked it up with the get_time tool.

@@ -16,7 +16,8 @@ export const repoUrl = `https://github.com/${gitConfig.user}/${gitConfig.repo}`;
 
 /** This documentation site's own repository. */
 export const docsRepoUrl = `https://github.com/${gitConfig.user}/SaGuDocs`;
-export const cloneCommand = `git clone ${repoUrl}.git`;
+export const installCommand = 'npm install sagu-sdk zod@3';
+export const npmUrl = 'https://www.npmjs.com/package/sagu-sdk';
 
 /** Link to a file or folder in the SDK repository. */
 export function sourceUrl(path: string) {

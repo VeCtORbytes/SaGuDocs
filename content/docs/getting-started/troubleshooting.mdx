@@ -11,9 +11,13 @@ Your Node.js version cannot strip TypeScript types natively. Upgrade. SAGU is ve
 
 Your Node.js predates the unflagged `node:sqlite` module. Upgrade Node.js, or use `InMemorySession` / `FileSession` instead of `SqliteSession`.
 
-## `Cannot find module 'sagu-sdk'`
+## `Cannot find module 'sagu-sdk'` / `ERR_MODULE_NOT_FOUND`
 
-SAGU is not published to npm. Import from the source entry by relative path, for example `"../src/index.ts"`. See [Installation](/docs/getting-started/installation#where-to-put-your-own-code).
+Install it in the project you're running from: `npm install sagu-sdk zod@3`. Make sure your `package.json` has `"type": "module"` (or use `.mjs`/`.mts` files). SAGU is ESM-only, so `require("sagu-sdk")` from CommonJS fails.
+
+## `npm error ERESOLVE … peer zod@"^3"`
+
+Your project already depends on Zod 4. SAGU needs Zod 3: `npm install zod@3`. If you pass a Zod 4 schema anyway, `defineTool` / `new Agent` throw `ConfigurationError: … requires Zod 3`.
 
 ## `ConfigurationError` thrown at startup
 

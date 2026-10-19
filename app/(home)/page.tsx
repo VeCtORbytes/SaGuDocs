@@ -16,11 +16,11 @@ import {
 import { ServerCodeBlock } from 'fumadocs-ui/components/codeblock.rsc';
 import { ArchitectureOverview } from '@/components/diagrams';
 import { AgentDemo } from '@/components/agent-demo';
-import { cloneCommand, repoUrl, sourceUrl } from '@/lib/shared';
+import { installCommand, npmUrl, repoUrl, sourceUrl } from '@/lib/shared';
 
 // Condensed from examples/01-basic-tool-agent/index.ts (same API, shorter tool body).
 const heroCode = `import { z } from "zod";
-import { Agent, defineTool, mock } from "../src/index.ts";
+import { Agent, defineTool, mock } from "sagu-sdk";
 
 const calculate = defineTool({
   name: "calculate",
@@ -48,7 +48,7 @@ else console.error(result.error.code);`;
 
 const attributes = [
   { k: 'language', v: 'TypeScript, ESM' },
-  { k: 'runtime dep', v: 'zod (neo4j-driver optional)' },
+  { k: 'install', v: 'npm · Node 22.13+ · zod 3 peer' },
   { k: 'providers', v: 'Mock · Anthropic · OpenAI · Gemini' },
   { k: 'graph memory', v: 'Neo4j + 3 background processes' },
   { k: 'tests', v: 'node --test, no API keys' },
@@ -175,7 +175,7 @@ export default function HomePage() {
           <div>
             <p className="inline-flex items-center gap-2 rounded-full border border-fd-border bg-fd-card px-3 py-1 font-mono text-xs text-fd-muted-foreground">
               <GitBranch className="size-3.5 text-sagu-accent" aria-hidden />
-              v0.1.0 · open source · run from source
+              v0.1.0 · open source · on npm
             </p>
             <h1 className="mt-5 text-4xl font-semibold tracking-tight sm:text-5xl">
               Build agents.
@@ -190,11 +190,11 @@ export default function HomePage() {
               <ButtonLink href="/docs/getting-started/quickstart" primary>
                 Get Started <ArrowRight className="size-4" aria-hidden />
               </ButtonLink>
-              <ButtonLink href={repoUrl}>Clone on GitHub</ButtonLink>
+              <ButtonLink href={repoUrl}>View on GitHub</ButtonLink>
             </div>
             <p className="mt-4 font-mono text-xs text-fd-muted-foreground">
               <span className="select-none text-sagu-accent">$ </span>
-              {cloneCommand}
+              {installCommand}
             </p>
             <dl className="mt-10 grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">
               {attributes.map((a) => (
@@ -315,14 +315,15 @@ export default function HomePage() {
         <div className="mx-auto max-w-6xl px-4 py-20 text-center sm:px-6">
           <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">Read the loop. Then build on it.</h2>
           <p className="mx-auto mt-3 max-w-xl text-fd-muted-foreground">
-            Clone the repository, run the examples without API keys, then plug in your own provider credentials.
+            Install from npm, try the examples without API keys, then plug in your own provider credentials.
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
             <ButtonLink href="/docs" primary>
               Read the documentation
             </ButtonLink>
             <ButtonLink href="/docs/examples">Browse examples</ButtonLink>
-            <ButtonLink href={repoUrl}>Clone the repository</ButtonLink>
+            <ButtonLink href={npmUrl}>npm package</ButtonLink>
+            <ButtonLink href={repoUrl}>GitHub repository</ButtonLink>
           </div>
         </div>
       </section>
@@ -337,6 +338,9 @@ export default function HomePage() {
             <Link href="/docs/reference" className="hover:text-fd-foreground">
               API
             </Link>
+            <a href={npmUrl} className="hover:text-fd-foreground" target="_blank" rel="noreferrer noopener">
+              npm
+            </a>
             <a href={repoUrl} className="hover:text-fd-foreground" target="_blank" rel="noreferrer noopener">
               GitHub
             </a>

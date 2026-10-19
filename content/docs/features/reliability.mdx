@@ -17,7 +17,7 @@ Four exported utilities in <Source path="src/reliability.ts" />:
 ## Retry
 
 ```ts
-import { withRetry } from "../src/index.ts";
+import { withRetry } from "sagu-sdk";
 
 const data = await withRetry(() => fetchInventory(), {
   maxRetries: 3,        // default 3
@@ -47,7 +47,7 @@ The runner wraps `model.generate()` in `withRetry({ maxRetries: 3, initialDelayM
 </Callout>
 
 ```ts
-import { anthropic, withRetry, type ModelProvider } from "../src/index.ts";
+import { anthropic, withRetry, type ModelProvider } from "sagu-sdk";
 
 const base = anthropic();
 const retrying: ModelProvider = {
@@ -60,7 +60,7 @@ const retrying: ModelProvider = {
 ## Timeout
 
 ```ts
-import { withTimeout, TimeoutError } from "../src/index.ts";
+import { withTimeout, TimeoutError } from "sagu-sdk";
 
 try {
   await withTimeout(slowCall(), 2_000, "inventory_lookup");
@@ -74,7 +74,7 @@ The runner applies `withTimeout` to a tool's `execute()` when `timeoutMs` is set
 ## Secret redaction
 
 ```ts
-import { redactSecrets } from "../src/index.ts";
+import { redactSecrets } from "sagu-sdk";
 
 redactSecrets({ apiKey: "abc", note: "token sk-abcdefghijklmnopqrstuvwxyz123" });
 // → { apiKey: "[REDACTED_SECRET]", note: "token [REDACTED_SECRET]" }

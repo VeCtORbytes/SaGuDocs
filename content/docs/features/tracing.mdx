@@ -14,7 +14,7 @@ Every run records a **trace**: a run ID, a tree of timed **spans**, and total to
 ## Example
 
 ```ts
-import { ConsoleExporter, JSONFileExporter } from "../src/index.ts";
+import { ConsoleExporter, JSONFileExporter } from "sagu-sdk";
 
 // Pretty tree on stdout
 await agent.run("What is 125 * 8?", { traceExporter: new ConsoleExporter() });
@@ -65,7 +65,7 @@ Failed spans carry `error: { name, message, stack }`.
 ## Custom exporters
 
 ```ts
-import type { TraceExporter } from "../src/index.ts";
+import type { TraceExporter } from "sagu-sdk";
 
 const httpExporter: TraceExporter = {
   async export(trace) {

@@ -26,7 +26,7 @@ With only `remember_fact` / `recall_facts`, the graph grows only when the model 
 From <Source path="examples/05-background-graph-memory/index.ts" />:
 
 ```ts
-import { Agent, LongTermMemory, createAutoGraphMemoryStore, anthropic } from "../src/index.ts";
+import { Agent, LongTermMemory, createAutoGraphMemoryStore, anthropic } from "sagu-sdk";
 
 const store = await createAutoGraphMemoryStore(); // Neo4j if NEO4J_URI is set
 const memory = new LongTermMemory({

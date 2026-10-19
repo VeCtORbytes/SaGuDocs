@@ -5,18 +5,13 @@ description: The Node.js version and tools you need before running SAGU.
 
 ## Node.js
 
-SAGU's source is TypeScript that Node.js runs **directly**, without a compile step. That relies on two newer Node.js features:
+| You want to | Minimum Node.js |
+|---|---|
+| Use the `sagu-sdk` package | **22.13** (declared in `engines`; earlier versions can't load `node:sqlite`) |
+| Run `.ts` files directly, like the snippets in these docs | 22.18 / 23.6 (native type stripping), or use `tsx` |
+| Run the repository's tests and examples | same as above; verified on **25.8** |
 
-| Feature | Used for | Available unflagged since |
-|---|---|---|
-| Native TypeScript type stripping | Running `.ts` files with `node file.ts` | Node.js 23.6 (also 22.18) |
-| `node:sqlite` | `SqliteSession` | Node.js 23.4 (also 22.13) |
-
-<Callout type="warn" title="Verified version">
-  The test suite and all five examples were verified on **Node.js 25.8**. The versions in the table come from the
-  Node.js release notes and have not been tested against SAGU. `package.json` declares no `engines` field, and the
-  README's "node ≥ 22.0.0" badge is lower than what type stripping needs. When in doubt, use Node.js 25.
-</Callout>
+The package was verified by installing it from npm and running it on Node.js 22.13 and 25.8.
 
 Check your version:
 
@@ -33,8 +28,8 @@ nvm use 25
 
 ## Other tools
 
-- **git**, to clone the repository.
-- **npm** (bundled with Node.js), to install `zod` and the dev dependencies.
+- **git**, only if you want to run the examples or contribute.
+- **npm** (bundled with Node.js) 7 or newer, so the Zod peer dependency installs automatically.
 - **Optional:** a running **Neo4j** instance, only if you want persistent graph memory. See [Neo4j graph memory](/docs/memory/graph#neo4jgraphmemorystore).
 - **Optional:** an API key for **Anthropic**, **OpenAI** or **Google Gemini**, only if you want to call a real model. Every example runs without one.
 

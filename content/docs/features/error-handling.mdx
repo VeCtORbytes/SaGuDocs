@@ -32,7 +32,7 @@ All extend `SaguError`, which has `code`, `message`, `details?` and `toJSON()`.
 ## Example
 
 ```ts
-import { GuardrailError, MaxTurnsExceededError, ProviderError } from "../src/index.ts";
+import { GuardrailError, MaxTurnsExceededError, ProviderError } from "sagu-sdk";
 
 const result = await agent.run(input);
 if (!result.success) {

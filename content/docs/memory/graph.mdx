@@ -31,7 +31,7 @@ Facts get written by the [background processes](/docs/features/background-proces
 ## InMemoryGraphMemoryStore
 
 ```ts
-import { InMemoryGraphMemoryStore } from "../src/index.ts";
+import { InMemoryGraphMemoryStore } from "sagu-sdk";
 
 const store = new InMemoryGraphMemoryStore();
 await store.remember({ subject: "User", predicate: "PREFERS_LANGUAGE", object: "TypeScript" });
@@ -69,7 +69,7 @@ export NEO4J_PASSWORD="your-password"
 ```
 
 ```ts
-import { Neo4jGraphMemoryStore, createAutoGraphMemoryStore, createGraphMemoryTools } from "../src/index.ts";
+import { Neo4jGraphMemoryStore, createAutoGraphMemoryStore, createGraphMemoryTools } from "sagu-sdk";
 
 // Explicit
 const store = new Neo4jGraphMemoryStore({ uri: process.env.NEO4J_URI!, database: "neo4j" });

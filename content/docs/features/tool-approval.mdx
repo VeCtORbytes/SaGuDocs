@@ -16,7 +16,7 @@ Some actions are irreversible or costly: refunds, deletions, deployments, emails
 ```ts
 import { createInterface } from "node:readline/promises";
 import { z } from "zod";
-import { Agent, defineTool, anthropic } from "../src/index.ts";
+import { Agent, defineTool, anthropic } from "sagu-sdk";
 
 const rebootServer = defineTool({
   name: "reboot_server",

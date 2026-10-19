@@ -8,7 +8,7 @@ description: Chain providers so a failure on one moves to the next.
 ## Usage
 
 ```ts
-import { Agent, FallbackProvider, anthropic, fallback, gemini, openai } from "../src/index.ts";
+import { Agent, FallbackProvider, anthropic, fallback, gemini, openai } from "sagu-sdk";
 
 // Factory: fallback(primary, ...fallbacks). Alias: fallbackProvider.
 const model = fallback(anthropic(), openai(), gemini());

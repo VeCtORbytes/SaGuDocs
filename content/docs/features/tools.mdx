@@ -17,9 +17,9 @@ Any time the model needs to *do* something or *look something up*: call an API, 
 
 ## Example
 
-```ts title="playground/tools.ts"
+```ts title="tools.ts"
 import { z } from "zod";
-import { Agent, defineTool, mock } from "../src/index.ts";
+import { Agent, defineTool, mock } from "sagu-sdk";
 
 const getWeather = defineTool({
   name: "get_weather",
@@ -76,7 +76,7 @@ See [How tool calls work](/docs/learn/tool-calls) for the full ordering.
 
 ## Limitations and common mistakes
 
-- **Zod 3 only.** `zodToJsonSchema()` reads Zod 3 internals (`_def.typeName`). Supported: string, number, boolean, object, array, enum, nativeEnum, optional, nullable, default, effects, union, discriminatedUnion, record, literal. Anything else is described to the model as `{ type: "string" }`, though validation still uses the real Zod schema.
+- **Zod 3 only.** `zodToJsonSchema()` reads Zod 3 internals (`_def.typeName`); Zod 4 schemas are rejected with a `ConfigurationError`. Supported: string, number, boolean, object, array, enum, nativeEnum, optional, nullable, default, effects, union, discriminatedUnion, record, literal. Anything else is described to the model as `{ type: "string" }`, though validation still uses the real Zod schema.
 - **String formats are not sent.** Refinements like `.email()`, `.min()` and `.max()` are validated but not included in the JSON Schema.
 - **Timeouts don't cancel your work.** `timeoutMs` stops *waiting*. Pass `context.abortSignal` to `fetch` (and similar) if you need cancellation. Note that `abortSignal` is the run's `signal`, not a per-tool timeout signal.
 - **Tool calls run sequentially**, in the order the model listed them.

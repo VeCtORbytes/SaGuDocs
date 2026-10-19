@@ -32,7 +32,7 @@ ANTHROPIC_API_KEY=your-key-here
 ```
 
 ```bash
-node --env-file=.env playground/hello.ts
+node --env-file=.env hello.ts
 ```
 
 The repository's `.gitignore` already ignores `.env` and `.env.*`.
@@ -42,7 +42,7 @@ The repository's `.gitignore` already ignores `.env` and `.env.*`.
 
 ```bash
 export OPENAI_API_KEY="your-key-here"
-node playground/hello.ts
+node hello.ts
 ```
 
 This puts the key in shell history unless your shell is configured to skip it.
@@ -53,7 +53,7 @@ This puts the key in shell history unless your shell is configured to skip it.
 Every adapter accepts `apiKey`, which takes precedence over the environment. Load it from your own secret manager:
 
 ```ts
-import { openai } from "../src/index.ts";
+import { openai } from "sagu-sdk";
 
 const model = openai({ apiKey: await loadSecret("openai") }); // loadSecret is your code
 ```

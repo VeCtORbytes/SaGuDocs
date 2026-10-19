@@ -17,7 +17,7 @@ From <Source path="examples/03-structured-output-and-memory/index.ts" />:
 
 ```ts
 import { z } from "zod";
-import { Agent, openai } from "../src/index.ts";
+import { Agent, openai } from "sagu-sdk";
 
 const LeadProfileSchema = z.object({
   fullName: z.string().describe("Candidate or contact full name"),
